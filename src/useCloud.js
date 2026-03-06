@@ -1,12 +1,13 @@
+// useCloud.js — dados compartilhados no Firestore (appdata/shared)
 import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
 const REF = () => doc(db, "appdata", "shared");
 
+// Debounce writes — agrupa todas as alterações em 1 save por segundo
 let timer = null;
 let pending = {};
-
 function save(key, value) {
   pending[key] = value;
   clearTimeout(timer);
@@ -17,49 +18,46 @@ function save(key, value) {
   }, 1000);
 }
 
-// Registro global de defaults para inicializar o documento na primeira vez
-const defaults = {};
-
-let snapshotData = null;
-let unsub = null;
-const subs = new Set();
+// Snapshot global único — evita múltiplas conexões
+const defaults = {};   // defaults registrados por cada useCloud
+let snapData   = null; // último valor recebido do Firestore
+let snapUnsub  = null; // unsubscribe do listener
+const subs     = new Set(); // callbacks dos componentes
 
 function startSnapshot() {
-  if (unsub) return;
-  unsub = onSnapshot(REF(),
+  if (snapUnsub) return;
+  snapUnsub = onSnapshot(REF(),
     (snap) => {
       if (!snap.exists()) {
-        // Documento não existe ainda — cria com todos os defaults registrados
-        console.log("[useCloud] documento vazio, inicializando com defaults...");
-        setDoc(REF(), defaults, { merge: true })
-          .then(() => console.log("[useCloud] defaults salvos"))
+        // Primeira vez — inicializa com os defaults do app
+        console.log("[useCloud] inicializando Firestore com defaults...");
+        setDoc(REF(), defaults)
+          .then(() => console.log("[useCloud] defaults salvos!"))
           .catch(e => console.error("[useCloud] erro init:", e));
-        snapshotData = { ...defaults };
+        snapData = { ...defaults };
       } else {
-        snapshotData = snap.data();
+        snapData = snap.data();
       }
-      subs.forEach(fn => fn(snapshotData));
+      subs.forEach(fn => fn(snapData));
     },
     (err) => console.error("[useCloud] erro snapshot:", err)
   );
 }
 
 export function useCloud(key, defaultValue) {
-  // Registra o default globalmente para uso na inicialização
   if (!(key in defaults)) defaults[key] = defaultValue;
 
-  const [value, setValue] = useState(defaultValue);
-  const [ready, setReady] = useState(false);
+  const [value, setValue]   = useState(defaultValue);
+  const [ready, setReady]   = useState(false);
 
   useEffect(() => {
-    const handler = (data) => {
+    function handler(data) {
       setValue(key in data ? data[key] : defaultValue);
       setReady(true);
-    };
+    }
     subs.add(handler);
     startSnapshot();
-    // Se já tem dados, aplica imediatamente
-    if (snapshotData !== null) handler(snapshotData);
+    if (snapData !== null) handler(snapData); // já tem dados, aplica já
     return () => subs.delete(handler);
   }, [key]);
 
