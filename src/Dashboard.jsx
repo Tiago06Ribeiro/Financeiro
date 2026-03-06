@@ -381,7 +381,11 @@ export default function Dashboard({ userEmail, onLogout }) {
       ...varLancs.map(g=>({...g,tipo:"variavel"})),
       ...fixLancs,
     ].sort((a,b)=>(a.data||"")>(b.data||"")?1:-1);
-    const total = allLancs.reduce((s,g)=>s+Number(g.valor),0);
+    const totalLancs = allLancs.reduce((s,g)=>s+Number(g.valor),0);
+    const fatData = getFatura(ct.id, fatM, fatA);
+    const valorTotal = fatData.valorTotal ? Number(fatData.valorTotal) : totalLancs;
+    const naoCat = Math.max(0, valorTotal - totalLancs);
+    const total = valorTotal;
     const paga = isFaturaPaga(ct.id, fatM, fatA);
     const isPastDue = fatA < CUR_YEAR || (fatA === CUR_YEAR && fatM < CUR_MONTH);
     const isDueThisMonth = fatA === CUR_YEAR && fatM === CUR_MONTH;
@@ -392,8 +396,8 @@ export default function Dashboard({ userEmail, onLogout }) {
       ? (ano > fatA || (ano === fatA && mes > fatM) || (ano === fatA && mes === fatM && TODAY_DAY >= 28))
       : isPastDue || (isDueThisMonth && TODAY_DAY >= (ct.vencimento || 1));
     const canPay = faturaFechada;
-    return { fatM, fatA, total, paga, lancamentos: allLancs, canPay,
-             dataPagamento: getFatura(ct.id, fatM, fatA).dataPagamento };
+    return { fatM, fatA, total, totalLancs, naoCat, paga, lancamentos: allLancs, canPay,
+             dataPagamento: fatData.dataPagamento, valorTotalSet: !!fatData.valorTotal };
   };
 
   // Show: fatura atual (due this month) + próxima (due next month)
@@ -1679,19 +1683,32 @@ export default function Dashboard({ userEmail, onLogout }) {
                       {/* Fatura header */}
                       <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:f.paga?"#f0fdf4":f.canPay?"#fffbeb":"#f7f4ef"}}>
                         <div style={{flex:1}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                             <span style={{fontSize:12,fontWeight:700,color:f.paga?"#16a34a":f.canPay?"#92400e":"#7a6a4a"}}>{label}</span>
                             <span style={{fontSize:13,fontWeight:"bold",color:f.paga?"#16a34a":"#1a1208"}}>{fmt(f.total)}</span>
                             {f.paga&&<span style={{...S.tag("#22c55e"),fontSize:10}}>✅ paga</span>}
                             {!f.paga&&f.canPay&&<span style={{...S.tag("#f59e0b"),fontSize:10}}>⏳ vence {PAD(ct.vencimento)}/{PAD(mes+1)}</span>}
                             {!f.paga&&!f.canPay&&<span style={{...S.tag("#9a8a6a"),fontSize:10}}>🔒 fatura aberta</span>}
+                            {f.naoCat>0&&<span style={{...S.tag("#6b7280"),fontSize:10}}>+{fmt(f.naoCat)} não categ.</span>}
                           </div>
                           {f.paga&&<div style={{fontSize:11,color:"#9a8a6a",marginTop:2}}>Pago em {fmtData(f.dataPagamento)}</div>}
-                          {!f.paga&&<div style={{fontSize:11,color:"#9a8a6a",marginTop:2}}>{f.lancamentos.length} lançamento{f.lancamentos.length!==1?"s":""} · fecha dia {ct.fechamento}</div>}
+                          {!f.paga&&<div style={{fontSize:11,color:"#9a8a6a",marginTop:2,display:"flex",alignItems:"center",gap:8}}>
+                            <span>{f.lancamentos.length} lançamento{f.lancamentos.length!==1?"s":""} cadastrados ({fmt(f.totalLancs)}) · fecha dia {ct.fechamento}</span>
+                          </div>}
+                          {/* Campo valor real da fatura */}
+                          <div style={{marginTop:6,display:"flex",alignItems:"center",gap:6}}>
+                            <span style={{fontSize:11,color:"#9a8a6a"}}>Valor real da fatura:</span>
+                            <input type="number" placeholder={fmt(f.totalLancs)}
+                              value={getFatura(ct.id,fatM,fatA).valorTotal||""}
+                              onChange={e=>{const k=faturaKey(ct.id,fatM,fatA);setFaturasPagas(prev=>({...prev,[k]:{...prev[k],valorTotal:e.target.value}}));}}
+                              style={{...S.input,width:100,padding:"2px 8px",fontSize:12,margin:0}}/>
+                            {f.valorTotalSet&&<button onClick={()=>{const k=faturaKey(ct.id,fatM,fatA);setFaturasPagas(prev=>{const n={...prev[k]};delete n.valorTotal;return {...prev,[k]:n};})}}
+                              style={{fontSize:11,color:"#9a8a6a",background:"none",border:"none",cursor:"pointer"}}>✕ limpar</button>}
+                          </div>
                         </div>
                         <div style={{display:"flex",gap:6,alignItems:"center"}}>
                           {/* Pagar só se canPay */}
-                          {f.canPay&&<button onClick={()=>setFaturasPagas(prev=>{const k=faturaKey(ct.id,fatM,fatA);return {...prev,[k]:{paga:!prev[k]?.paga,dataPagamento:!prev[k]?.paga?today():""}}})}
+                          {f.canPay&&<button onClick={()=>setFaturasPagas(prev=>{const k=faturaKey(ct.id,fatM,fatA);return {...prev,[k]:{...prev[k],paga:!prev[k]?.paga,dataPagamento:!prev[k]?.paga?today():""}}})}
                             style={{...S.btn(f.paga?"#9a8a6a":"#22c55e"),padding:"6px 14px",fontSize:12}}>
                             {f.paga?"Desfazer":"✓ Pagar"}
                           </button>}
