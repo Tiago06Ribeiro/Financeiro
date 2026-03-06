@@ -849,27 +849,38 @@ export default function Dashboard({ userEmail, onLogout }) {
                     }
                     return dia===d?s+Number(r.previsto):s;
                   },0);
-                  // faturas por mês de pagamento — linhas constantes no gráfico
-                  // fatMesAtual = soma das faturas pagas NESTE mês (drillM/drillA)
-                  // fatProxMes  = soma das faturas pagas NO PRÓXIMO mês
-                  // São constantes (mesmo valor em cada dia), mas calculadas aqui para ficar no dayData
+                  // Fatura março (pagar este mês): só aparece até o fechamento do último cartão normal
+                  // Cartões normais (fecha dia F): fatura março cobre dias 1..F
+                  // Cartões eom: fatura março cobre todos os dias
+                  // A linha termina no dia do último fechamento dentre os cartões normais
+                  const maxFechNormal = contas.filter(ct=>ct.tipo==="credito"&&(ct.fechamento||1)<28)
+                    .reduce((mx,ct)=>Math.max(mx,ct.fechamento||1),0);
+                  // dia <= maxFechNormal → fatura março ainda aberta (ou eom sempre aberta)
+                  // Para cada dia: incluir cartão na fatura março se o dia ainda está no ciclo dele
                   const fatMesAtual = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
                     const eom=(ct.fechamento||1)>=28;
-                    // fatura paga em drillM = fechou em drillM-1 (eom) ou em drillM (normal)
+                    const fech=ct.fechamento||1;
+                    // cartão entra na linha março se o dia ainda está dentro do ciclo dele
+                    if(!eom && dia>fech) return s; // ciclo desse cartão já virou
                     const fatM=eom?(drillM-1+12)%12:drillM;
                     const fatA=eom?(drillM===0?drillA-1:drillA):drillA;
                     const f=buildFatura(ct,fatM,fatA);
                     return s+(f?f.total:0);
                   },0);
                   const drillNxtM=(drillM+1)%12; const drillNxtA=drillM===11?drillA+1:drillA;
+                  // Fatura abril (pagar próximo mês):
+                  // - cartões eom (Nu Mari/Nu PJ): fatura abril = ciclo de março inteiro → aparece do dia 1
+                  // - cartões normais (Digio/Nu Tiago, fecha dia 10): aparecem a partir do dia 11
                   const fatProxMes = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
                     const eom=(ct.fechamento||1)>=28;
+                    const fech=ct.fechamento||1;
+                    if(!eom && dia<=fech) return s; // ciclo março ainda aberto para esse cartão
                     const fatM=eom?drillM:drillNxtM;
                     const fatA=eom?drillA:drillNxtA;
                     const f=buildFatura(ct,fatM,fatA);
                     return s+(f?f.total:0);
                   },0);
-                  return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,gastosAcum,previstoDia,fatMesAtual,fatProxMes,...byCat,...byConta};
+                  return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,gastosAcum,previstoDia,fatMesAtual:fatMesAtual||null,fatProxMes:fatProxMes||null,...byCat,...byConta};
                 });
 
                 const drillNxtM2=(drillM+1)%12;
