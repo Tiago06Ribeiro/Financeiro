@@ -19,7 +19,10 @@ let writeTimer = null;
 function flushWrite() {
   if (!Object.keys(pendingWrite).length) return;
   const ref = doc(db, SHARED_COLLECTION, SHARED_DOC);
-  setDoc(ref, pendingWrite, { merge: true });
+  console.log("[useCloud] saving keys:", Object.keys(pendingWrite));
+  setDoc(ref, pendingWrite, { merge: true })
+    .then(() => console.log("[useCloud] saved ok"))
+    .catch(e => console.error("[useCloud] WRITE ERROR:", e));
   pendingWrite = {};
 }
 
@@ -37,10 +40,14 @@ let snapshotData = null;
 function ensureSnapshot(onData) {
   if (!snapshotUnsub) {
     const ref = doc(db, SHARED_COLLECTION, SHARED_DOC);
-    snapshotUnsub = onSnapshot(ref, (snap) => {
-      snapshotData = snap.exists() ? snap.data() : {};
-      Object.values(listeners).forEach(fn => fn(snapshotData));
-    });
+    snapshotUnsub = onSnapshot(ref, 
+      (snap) => {
+        console.log("[useCloud] snapshot received, exists:", snap.exists());
+        snapshotData = snap.exists() ? snap.data() : {};
+        Object.values(listeners).forEach(fn => fn(snapshotData));
+      },
+      (err) => console.error("[useCloud] SNAPSHOT ERROR:", err)
+    );
   } else if (snapshotData !== null) {
     // Already have data, call immediately
     setTimeout(() => onData(snapshotData), 0);
