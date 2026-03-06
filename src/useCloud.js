@@ -1,79 +1,72 @@
-// useCloud.js
-// Dados compartilhados entre todos os usuários autorizados
-// Salva em Firestore no documento "shared/data" com debounce
-
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
-const SHARED_DOC = "shared";
-const SHARED_COLLECTION = "appdata";
+const REF = () => doc(db, "appdata", "shared");
 
-// Single document holds all app state as fields
-// shared/appdata/{ receitas: [...], gastos: [...], ... }
+let timer = null;
+let pending = {};
 
-let cache = {};           // in-memory cache to avoid re-reads
-let pendingWrite = {};    // fields waiting to be written
-let writeTimer = null;
-
-function flushWrite() {
-  if (!Object.keys(pendingWrite).length) return;
-  const ref = doc(db, SHARED_COLLECTION, SHARED_DOC);
-  console.log("[useCloud] saving keys:", Object.keys(pendingWrite));
-  setDoc(ref, pendingWrite, { merge: true })
-    .then(() => console.log("[useCloud] saved ok"))
-    .catch(e => console.error("[useCloud] WRITE ERROR:", e));
-  pendingWrite = {};
+function save(key, value) {
+  pending[key] = value;
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    setDoc(REF(), pending, { merge: true })
+      .catch(e => console.error("[useCloud] erro ao salvar:", e));
+    pending = {};
+  }, 1000);
 }
 
-function scheduleWrite(key, value) {
-  pendingWrite[key] = value;
-  clearTimeout(writeTimer);
-  writeTimer = setTimeout(flushWrite, 1000); // batch writes, 1s debounce
-}
+// Registro global de defaults para inicializar o documento na primeira vez
+const defaults = {};
 
-// Global snapshot listener — starts once, shared across all hooks
-let listeners = {};
-let snapshotUnsub = null;
 let snapshotData = null;
+let unsub = null;
+const subs = new Set();
 
-function ensureSnapshot(onData) {
-  if (!snapshotUnsub) {
-    const ref = doc(db, SHARED_COLLECTION, SHARED_DOC);
-    snapshotUnsub = onSnapshot(ref, 
-      (snap) => {
-        console.log("[useCloud] snapshot received, exists:", snap.exists());
-        snapshotData = snap.exists() ? snap.data() : {};
-        Object.values(listeners).forEach(fn => fn(snapshotData));
-      },
-      (err) => console.error("[useCloud] SNAPSHOT ERROR:", err)
-    );
-  } else if (snapshotData !== null) {
-    // Already have data, call immediately
-    setTimeout(() => onData(snapshotData), 0);
-  }
+function startSnapshot() {
+  if (unsub) return;
+  unsub = onSnapshot(REF(),
+    (snap) => {
+      if (!snap.exists()) {
+        // Documento não existe ainda — cria com todos os defaults registrados
+        console.log("[useCloud] documento vazio, inicializando com defaults...");
+        setDoc(REF(), defaults, { merge: true })
+          .then(() => console.log("[useCloud] defaults salvos"))
+          .catch(e => console.error("[useCloud] erro init:", e));
+        snapshotData = { ...defaults };
+      } else {
+        snapshotData = snap.data();
+      }
+      subs.forEach(fn => fn(snapshotData));
+    },
+    (err) => console.error("[useCloud] erro snapshot:", err)
+  );
 }
 
 export function useCloud(key, defaultValue) {
+  // Registra o default globalmente para uso na inicialização
+  if (!(key in defaults)) defaults[key] = defaultValue;
+
   const [value, setValue] = useState(defaultValue);
   const [ready, setReady] = useState(false);
-  const id = useRef(Math.random().toString(36).slice(2));
 
   useEffect(() => {
-    const listenerId = id.current;
-    listeners[listenerId] = (data) => {
-      const v = data[key] !== undefined ? data[key] : defaultValue;
-      setValue(v);
+    const handler = (data) => {
+      setValue(key in data ? data[key] : defaultValue);
       setReady(true);
     };
-    ensureSnapshot(listeners[listenerId]);
-    return () => { delete listeners[listenerId]; };
+    subs.add(handler);
+    startSnapshot();
+    // Se já tem dados, aplica imediatamente
+    if (snapshotData !== null) handler(snapshotData);
+    return () => subs.delete(handler);
   }, [key]);
 
   function set(valOrFn) {
     setValue(prev => {
       const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn;
-      scheduleWrite(key, next);
+      save(key, next);
       return next;
     });
   }
