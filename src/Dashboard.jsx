@@ -188,6 +188,7 @@ export default function Dashboard({ userEmail, onLogout }) {
     setConfirmando(null);
   }
   const [mesSelecionado, setMesSelecionado] = useState(null);
+  const [diaFiltro, setDiaFiltro] = useState(null);
   const LINHAS_DEFAULT = { previsto:true, realizado:true, gastos:true, saidas:true };
   const [linhasAtivas, setLinhasAtivas] = useState(LINHAS_DEFAULT);
   const toggleLinha = (k) => setLinhasAtivas(prev=>({...prev,[k]:!prev[k]}));
@@ -618,7 +619,7 @@ export default function Dashboard({ userEmail, onLogout }) {
   function navMes(dir) {
     let m=mes+dir, a=ano;
     if(m>11){m=0;a++;} if(m<0){m=11;a--;}
-    setMes(m); setAno(a);
+    setMes(m); setAno(a); setMesSelecionado(null); setDiaFiltro(null);
   }
 
   const catById = id => catsGasto.find(c=>c.id===id);
@@ -850,24 +851,40 @@ export default function Dashboard({ userEmail, onLogout }) {
                   return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,gastosAcum,previstoDia,...byCat,...byConta};
                 });
 
-                const totalGstMes = gstMes.reduce((s,g)=>s+Number(g.valor),0)
-                  + fixosAtivosDrill.reduce((s,g)=>s+Number(g.valor),0);
+                // Fatura atual do drill = o que fecha nesse mês e será pago no próximo
+                const drillNxtM=(drillM+1)%12; const drillNxtA=drillM===11?drillA+1:drillA;
+                const faturaAtualDrill = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
+                  const eom=(ct.fechamento||1)>=28;
+                  const fatM=eom?drillM:drillNxtM; const fatA=eom?drillA:drillNxtA;
+                  const f=buildFatura(ct,fatM,fatA);
+                  return s+(f?f.total:0);
+                },0);
+                // Lançamentos da fatura atual (para a lista)
+                const lancsFaturaAtual = contas.filter(ct=>ct.tipo==="credito").flatMap(ct=>{
+                  const eom=(ct.fechamento||1)>=28;
+                  const fatM=eom?drillM:drillNxtM; const fatA=eom?drillA:drillNxtA;
+                  const f=buildFatura(ct,fatM,fatA);
+                  return f?f.lancamentos.map(l=>({...l,_ct:ct})):[];
+                });
 
                 return (
                   <div style={S.card}>
                     {/* Header drill */}
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
-                        <button onClick={()=>setMesSelecionado(null)}
+                        <button onClick={()=>{setMesSelecionado(null);setDiaFiltro(null);}}
                           style={{background:"none",border:"none",borderRadius:6,padding:"3px 8px",fontSize:11,color:"#b0a890",cursor:"pointer",letterSpacing:"0.5px",opacity:0.7}}>
                           ↑ visão geral
                         </button>
                         <span style={{fontWeight:700,fontSize:16}}>🔍 {MONTHS[drillM]} {drillA} — dia a dia</span>
+                        {diaFiltro&&<button onClick={()=>setDiaFiltro(null)} style={{background:"#f0ebe0",border:"none",borderRadius:6,padding:"2px 8px",fontSize:11,color:"#7a6a4a",cursor:"pointer"}}>
+                          dia {diaFiltro} ✕
+                        </button>}
                       </div>
                       <div style={{display:"flex",gap:8,fontSize:11,flexWrap:"wrap"}}>
                         <span style={{color:"#22c55e"}}>✅ Recebido: {fmt(totalRealMes)}</span>
-                        <span style={{color:"#ef4444"}}>💸 Gastos: {fmt(totalGstMes)}</span>
-                        <span style={{color:totalRealMes-totalGstMes>=0?"#3b82f6":"#ef4444"}}>💰 Saldo: {fmt(totalRealMes-totalGstMes)}</span>
+                        <span style={{color:"#a855f7"}}>💳 Fatura atual: {fmt(faturaAtualDrill)}</span>
+                        <span style={{color:totalRealMes-faturaAtualDrill>=0?"#3b82f6":"#ef4444"}}>💰 Saldo prev.: {fmt(totalRealMes-faturaAtualDrill)}</span>
                       </div>
                     </div>
 
@@ -908,7 +925,7 @@ export default function Dashboard({ userEmail, onLogout }) {
                     </div>
 
                     <ResponsiveContainer width="100%" height={260}>
-                      <LineChart data={dayData}>
+                      <LineChart data={dayData} onClick={(e)=>{if(e&&e.activePayload){const d=e.activePayload[0]?.payload;if(d)setDiaFiltro(prev=>prev===d.dia?null:d.dia);}}}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0ebe0"/>
                         <XAxis dataKey="name" tick={{fontSize:10,fill:"#9a8a6a"}} axisLine={false} tickLine={false} interval={1}/>
                         <YAxis tick={{fontSize:10,fill:"#9a8a6a"}} axisLine={false} tickLine={false}/>
@@ -928,27 +945,32 @@ export default function Dashboard({ userEmail, onLogout }) {
                       </LineChart>
                     </ResponsiveContainer>
 
-                    {/* Lançamentos do mês */}
-                    {(gstMes.length>0||fixosAtivosDrill.length>0)&&<div style={{marginTop:14,borderTop:"1px solid #f0ebe0",paddingTop:12}}>
-                      <div style={{...S.label,marginBottom:8}}>Todos os lançamentos</div>
-                      <div style={{maxHeight:220,overflowY:"auto"}}>
-                        {[
-                          ...gstMes.map(g=>({...g,_dia:g.data?Number(g.data.split("-")[2]):1})),
-                          ...fixosAtivosDrill.map(g=>({...g,_dia:Number(g.diaPagamento),_fixo:true}))
-                        ].sort((a,b)=>a._dia-b._dia).map(g=>{
-                          const cat=catById(g.categoria);
-                          const conta=contaById(g.conta);
-                          return <div key={(g._fixo?"f":"")+g.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"5px 0",borderBottom:"1px solid #f0ebe0"}}>
-                            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                              <span style={{background:"#f0ebe0",borderRadius:6,padding:"1px 7px",fontWeight:600,color:"#7a6a4a",fontSize:11}}>dia {g._dia}</span>
-                              <span>{g.descricao}</span>
-                              {g._fixo&&<span style={{fontSize:10,color:"#9a8a6a",background:"#f0ebe0",borderRadius:4,padding:"1px 5px"}}>fixo</span>}
-                              {cat&&<span style={{...S.tag(cat.cor),fontSize:10}}>{cat.emoji} {cat.nome}</span>}
-                              {conta&&<span style={{...S.tag(conta.cor),fontSize:10}}>{conta.emoji}</span>}
-                            </div>
-                            <span style={{color:"#ef4444",fontWeight:600}}>{fmt(g.valor)}</span>
-                          </div>;
-                        })}
+                    {/* Lançamentos da fatura atual, filtráveis por dia */}
+                    {lancsFaturaAtual.length>0&&<div style={{marginTop:14,borderTop:"1px solid #f0ebe0",paddingTop:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                        <div style={{...S.label}}>💳 Fatura atual{diaFiltro?` — dia ${diaFiltro}`:""}</div>
+                        {diaFiltro&&<button onClick={()=>setDiaFiltro(null)} style={{fontSize:11,color:"#9a8a6a",background:"#f0ebe0",border:"none",borderRadius:6,padding:"2px 8px",cursor:"pointer"}}>ver todos ✕</button>}
+                      </div>
+                      <div style={{maxHeight:240,overflowY:"auto"}}>
+                        {lancsFaturaAtual
+                          .filter(g=>!diaFiltro||Number((g.data||"").split("-")[2])===diaFiltro||Number(g.diaPagamento)===diaFiltro)
+                          .sort((a,b)=>(a.data||"")>(b.data||"")?1:-1)
+                          .map((g,i)=>{
+                            const cat=catById(g.categoria);
+                            const conta=g._ct||contaById(g.conta);
+                            const diaLanc=g.data?Number(g.data.split("-")[2]):(g.diaPagamento||"?");
+                            return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"5px 0",borderBottom:"1px solid #f0ebe0",cursor:"pointer",background:diaFiltro===diaLanc?"#fefce8":"transparent"}}
+                              onClick={()=>setDiaFiltro(prev=>prev===diaLanc?null:diaLanc)}>
+                              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                                <span style={{background:"#f0ebe0",borderRadius:6,padding:"1px 7px",fontWeight:600,color:"#7a6a4a",fontSize:11}}>dia {diaLanc}</span>
+                                <span>{g.descricao}</span>
+                                {g.tipo==="fixo"&&<span style={{fontSize:10,color:"#9a8a6a",background:"#f0ebe0",borderRadius:4,padding:"1px 5px"}}>fixo</span>}
+                                {cat&&<span style={{...S.tag(cat.cor),fontSize:10}}>{cat.emoji} {cat.nome}</span>}
+                                {conta&&<span style={{...S.tag(conta.cor||"#9a8a6a"),fontSize:10}}>{conta.emoji}</span>}
+                              </div>
+                              <span style={{color:"#ef4444",fontWeight:600}}>{fmt(g.valor)}</span>
+                            </div>;
+                          })}
                       </div>
                     </div>}
                   </div>
@@ -1054,17 +1076,23 @@ export default function Dashboard({ userEmail, onLogout }) {
             <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>
               <div style={S.card}>
                 <div style={{...S.label,marginBottom:4}}>📊 {MONTHS[mes]}/{ano} — Previsto vs Realizado</div>
-                <div style={{fontSize:11,color:"#9a8a6a",marginBottom:12}}>Falta receber: {fmt(totalPendente)} · Realizado: {fmt(totalRealizado)} · Gastos: {fmt(totalGastos)}</div>
-                <ResponsiveContainer width="100%" height={170}>
-                  <BarChart data={[{name:"Receita",Previsto:totalPrevisto,"Já recebido":totalRealizado,"Falta receber":totalPendente},{name:"Gastos",Gastos:totalGastos,"Saldo esperado":Math.max(0,totalPrevisto-totalGastos)}]} layout="vertical">
+                <div style={{fontSize:11,color:"#9a8a6a",marginBottom:12}}>Recebido: {fmt(totalRealizado)} · Saídas: {fmt(totalFaturasAnterior+totalDebitosNoMes)} · Fatura atual: {fmt(totalFaturaAtual)}</div>
+                <ResponsiveContainer width="100%" height={190}>
+                  <BarChart data={[
+                    {name:"Receita", "Recebido":totalRealizado, "Falta receber":totalPendente},
+                    {name:"Saídas",  "Faturas pagas":totalFaturasAnterior, "Débitos":totalDebitosNoMes},
+                    {name:"Fatura próx.", "Fatura atual":totalFaturaAtual, "Débitos prev.":totalDebitosPrevisto},
+                  ]} layout="vertical">
                     <XAxis type="number" tick={{fontSize:10,fill:"#9a8a6a"}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
-                    <YAxis type="category" dataKey="name" tick={{fontSize:12,fill:"#9a8a6a"}} axisLine={false} tickLine={false} width={50}/>
+                    <YAxis type="category" dataKey="name" tick={{fontSize:12,fill:"#9a8a6a"}} axisLine={false} tickLine={false} width={70}/>
                     <Tooltip formatter={v=>fmt(v)} contentStyle={{background:"white",border:"1px solid #d4c8a8",borderRadius:8,fontSize:12}}/>
                     <Legend iconType="circle" wrapperStyle={{fontSize:11}}/>
-                    <Bar dataKey="Já recebido" fill="#22c55e" radius={[0,4,4,0]} stackId="r"/>
+                    <Bar dataKey="Recebido" fill="#22c55e" radius={[0,0,0,0]} stackId="r"/>
                     <Bar dataKey="Falta receber" fill="#fde68a" radius={[0,4,4,0]} stackId="r"/>
-                    <Bar dataKey="Gastos" fill="#ef4444" radius={[0,4,4,0]} stackId="g"/>
-                    <Bar dataKey="Saldo esperado" fill="#bfdbfe" radius={[0,4,4,0]} stackId="g"/>
+                    <Bar dataKey="Faturas pagas" fill="#ef4444" radius={[0,0,0,0]} stackId="s"/>
+                    <Bar dataKey="Débitos" fill="#f97316" radius={[0,4,4,0]} stackId="s"/>
+                    <Bar dataKey="Fatura atual" fill="#a855f7" radius={[0,0,0,0]} stackId="f"/>
+                    <Bar dataKey="Débitos prev." fill="#7c3aed" radius={[0,4,4,0]} stackId="f"/>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
