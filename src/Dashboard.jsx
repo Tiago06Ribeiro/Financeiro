@@ -135,7 +135,7 @@ export default function Dashboard({ userEmail, onLogout }) {
   const [contas, setContas, _r2] = useCloud("contas", DEFAULT_CONTAS);
   const [orcamentos, setOrcamentos] = useCloud("orcamentos", DEFAULT_ORCAMENTOS);
   const [receitas, setReceitas, _r3] = useCloud("receitas", DEFAULT_RECEITAS);
-  const [realizados, setRealizados] = useState(DEFAULT_REALIZADOS);
+  const [realizados, setRealizados] = useCloud("realizados", DEFAULT_REALIZADOS);
   const [gastos, setGastos, _r4] = useCloud("gastos", []);
   const [gastosFixos, setGastosFixos, _r5] = useCloud("gastosFixos", DEFAULT_GASTOS_FIXOS);
   const [pagosFixos, setPagosFixos] = useCloud("pagosFixos", {});
