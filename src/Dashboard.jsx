@@ -482,7 +482,13 @@ export default function Dashboard({ userEmail, onLogout }) {
       const fixVal=fixosAtivosM.filter(g=>g.categoria===c.id).reduce((s,g)=>s+Number(g.valor),0);
       byCat[c.id]=varVal+fixVal;
     });
-    return {name:MONTHS[m],mes:m,ano:a,previsto:prev,realizado:real,gastos:gst,fixos,...byOrc,...byCat,isCurrent:m===mes&&a===ano};
+    const byConta={};
+    contas.filter(ct=>ct.tipo==="credito").forEach(ct=>{
+      const varVal=gstAll.filter(g=>g.conta===ct.id).reduce((s,g)=>s+Number(g.valor),0);
+      const fixVal=fixosAtivosM.filter(g=>g.conta===ct.id).reduce((s,g)=>s+Number(g.valor),0);
+      byConta[ct.id]=varVal+fixVal;
+    });
+    return {name:MONTHS[m],mes:m,ano:a,previsto:prev,realizado:real,gastos:gst,fixos,...byOrc,...byCat,...byConta,isCurrent:m===mes&&a===ano};
   });
 
   function toggleRecebido(receitaId, dataRecebimento) {
@@ -895,6 +901,15 @@ export default function Dashboard({ userEmail, onLogout }) {
                         borderRadius:20,padding:"3px 12px",fontSize:11,fontWeight:700,cursor:"pointer"
                       }}>{c.emoji} {c.nome}</button>
                     ))}
+                    <span style={{fontSize:11,color:"#c0b8a0",margin:"4px 4px 0"}}>Cartões:</span>
+                    {contas.filter(ct=>ct.tipo==="credito").map(ct=>(
+                      <button key={ct.id} onClick={()=>setLinhasOrc(prev=>({...prev,[ct.id]:!prev[ct.id]}))} style={{
+                        background:linhasOrc[ct.id]?ct.cor+"22":"#f0ebe0",
+                        color:linhasOrc[ct.id]?ct.cor:"#9a8a6a",
+                        border:`1px solid ${linhasOrc[ct.id]?ct.cor:"#e0dbd0"}`,
+                        borderRadius:20,padding:"3px 12px",fontSize:11,fontWeight:700,cursor:"pointer"
+                      }}>{ct.emoji} {ct.nome.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio")}</button>
+                    ))}
                   </div>
 
                   {/* Month label buttons for reliable drill-down */}
@@ -932,6 +947,9 @@ export default function Dashboard({ userEmail, onLogout }) {
                       ))}
                       {catsGasto.filter(c=>linhasCat[c.id]===true).map(c=>(
                         <Line key={c.id} type="monotone" dataKey={c.id} stroke={c.cor} strokeWidth={1.5} strokeDasharray="4 2" name={c.nome} dot={{r:4,cursor:"pointer",fill:c.cor}} activeDot={{r:6}}/>
+                      ))}
+                      {contas.filter(ct=>ct.tipo==="credito"&&linhasOrc[ct.id]).map(ct=>(
+                        <Line key={ct.id} type="monotone" dataKey={ct.id} stroke={ct.cor} strokeWidth={1.5} name={ct.nome.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio")} dot={{r:4,cursor:"pointer",fill:ct.cor}} activeDot={{r:6}}/>
                       ))}
                     </LineChart>
                   </ResponsiveContainer>
