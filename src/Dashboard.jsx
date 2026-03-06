@@ -188,7 +188,7 @@ export default function Dashboard({ userEmail, onLogout }) {
     setConfirmando(null);
   }
   const [mesSelecionado, setMesSelecionado] = useState(null);
-  const LINHAS_DEFAULT = { previsto:true, realizado:true, gastos:true, fixos:true };
+  const LINHAS_DEFAULT = { previsto:true, realizado:true, gastos:true, saidas:true };
   const [linhasAtivas, setLinhasAtivas] = useState(LINHAS_DEFAULT);
   const toggleLinha = (k) => setLinhasAtivas(prev=>({...prev,[k]:!prev[k]}));
   const [linhasOrc, setLinhasOrc] = useState({});
@@ -464,14 +464,22 @@ export default function Dashboard({ userEmail, onLogout }) {
     return s+(recebido?0:Number(r.previsto));
   },0);
   const tudo100 = totalPrevisto>0 && totalPendente===0;
+  // Gastos por conta = fatura atual acumulada (que será paga no próximo mês)
   const gastosPorContaData = contas
     .filter(ct => userFilter==="Todos" || ct.usuario===userFilter)
-    .map(ct => ({
-      name: ct.nome.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio"),
-      valor: gastosContaMes(ct.id,mes,ano),
-      cor: ct.cor,
-      id: ct.id,
-    })).filter(d=>d.valor>0);
+    .map(ct => {
+      const name = ct.nome.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio");
+      if (ct.tipo !== "credito") {
+        // corrente: gastos diretos do mês
+        return { name, valor: gastosContaMes(ct.id,mes,ano), cor: ct.cor, id: ct.id };
+      }
+      // crédito: fatura atual = o que fecha agora e será pago no próximo mês
+      const endOfMonth = (ct.fechamento || 1) >= 28;
+      const fatM = endOfMonth ? mes : nextFatMes;
+      const fatA = endOfMonth ? ano : nextFatAno;
+      const f = buildFatura(ct, fatM, fatA);
+      return { name, valor: f ? f.total : 0, cor: ct.cor, id: ct.id };
+    }).filter(d=>d.valor>0);
 
   // Próximo mês previsto (para quando 100% realizado)
   const proxMes = (mes+1)%12;
@@ -499,8 +507,32 @@ export default function Dashboard({ userEmail, onLogout }) {
       if(g.vigenciaFim && cur>g.vigenciaFim) return false;
       return userFilter==="Todos"||g.usuario===userFilter;
     });
-    const gst=gstAll.reduce((s,g)=>s+Number(g.valor),0) + fixosAtivosM.reduce((s,g)=>s+Number(g.valor),0);
-    const fixos=fixosAtivosM.filter(g=>!contas.find(ct=>ct.id===g.conta&&ct.tipo==="credito")).reduce((s,g)=>s+Number(g.valor),0);
+    // gastos = fatura atual de cada cartão (o que está acumulando, será pago no próximo mês)
+    // saidas = faturas pagas neste mês + débitos diretos
+    const nxtM = (m+1)%12; const nxtA = m===11?a+1:a;
+    const gastosCartoes = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
+      const eom=(ct.fechamento||1)>=28;
+      const fatM=eom?m:nxtM; const fatA=eom?a:nxtA;
+      const f=buildFatura(ct,fatM,fatA);
+      return s+(f?f.total:0);
+    },0);
+    const debitosM = fixosAtivosM.filter(g=>{
+      const ct=g.conta?contas.find(x=>x.id===g.conta):null;
+      return ct?.tipo==="corrente"||(!g.conta&&g.debitoAuto);
+    }).reduce((s,g)=>s+Number(g.valor),0)
+    + gstAll.filter(g=>{
+      const ct=g.conta?contas.find(x=>x.id===g.conta):null;
+      return ct?.tipo==="corrente"||!g.conta;
+    }).reduce((s,g)=>s+Number(g.valor),0);
+    // faturas pagas neste mês = faturas que fecharam no mês anterior (end-of-month) ou no próprio mês (normal)
+    const faturasPagasM = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
+      const eom=(ct.fechamento||1)>=28;
+      const fatM=eom?(m-1+12)%12:m; const fatA=eom?(m===0?a-1:a):a;
+      const f=buildFatura(ct,fatM,fatA);
+      return s+(f?f.total:0);
+    },0);
+    const gst=gastosCartoes; // fatura atual
+    const saidas=faturasPagasM+debitosM; // o que sai no bolso este mês
     const byOrc={};
     orcamentos.forEach(o=>{
       const varVal=gstAll.filter(g=>g.orcamento===o.id).reduce((s,g)=>s+Number(g.valor),0);
@@ -515,11 +547,12 @@ export default function Dashboard({ userEmail, onLogout }) {
     });
     const byConta={};
     contas.filter(ct=>ct.tipo==="credito").forEach(ct=>{
-      const varVal=gstAll.filter(g=>g.conta===ct.id).reduce((s,g)=>s+Number(g.valor),0);
-      const fixVal=fixosAtivosM.filter(g=>g.conta===ct.id).reduce((s,g)=>s+Number(g.valor),0);
-      byConta[ct.id]=varVal+fixVal;
+      const eom=(ct.fechamento||1)>=28;
+      const fatM=eom?m:nxtM; const fatA=eom?a:nxtA;
+      const f=buildFatura(ct,fatM,fatA);
+      byConta[ct.id]=f?f.total:0;
     });
-    return {name:MONTHS[m],mes:m,ano:a,previsto:prev,realizado:real,gastos:gst,fixos,...byOrc,...byCat,...byConta,isCurrent:m===mes&&a===ano};
+    return {name:MONTHS[m],mes:m,ano:a,previsto:prev,realizado:real,gastos:gst,saidas,...byOrc,...byCat,...byConta,isCurrent:m===mes&&a===ano};
   });
 
   function toggleRecebido(receitaId, dataRecebimento) {
@@ -934,8 +967,8 @@ export default function Dashboard({ userEmail, onLogout }) {
                     {[
                       {k:"previsto",label:"Previsto",cor:"#d4c8a8"},
                       {k:"realizado",label:"Realizado",cor:"#22c55e"},
-                      {k:"gastos",label:"Total Gastos",cor:"#ef4444"},
-                      {k:"fixos",label:"Fixos/Débito",cor:"#6b7280"},
+                      {k:"gastos",label:"Gastos (fatura atual)",cor:"#ef4444"},
+                      {k:"saidas",label:"Saídas (fatura paga+débitos)",cor:"#f97316"},
                     ].map(l=>(
                       <button key={l.k} onClick={()=>toggleLinha(l.k)} style={{
                         background:linhasAtivas[l.k]?l.cor+"22":"#f0ebe0",
@@ -1001,8 +1034,8 @@ export default function Dashboard({ userEmail, onLogout }) {
                       <Tooltip formatter={(v,n)=>[fmt(v),n]} contentStyle={{background:"white",border:"1px solid #d4c8a8",borderRadius:8,fontSize:12}} labelFormatter={l=>`${l} — clique para detalhar`}/>
                       {linhasAtivas.previsto&&<Line type="monotone" dataKey="previsto" stroke="#d4c8a8" strokeWidth={2} strokeDasharray="5 5" name="Previsto" dot={{r:6,cursor:"pointer",fill:"#d4c8a8"}} activeDot={{r:8}}/>}
                       {linhasAtivas.realizado&&<Line type="monotone" dataKey="realizado" stroke="#22c55e" strokeWidth={2} name="Realizado" dot={{r:6,cursor:"pointer",fill:"#22c55e"}} activeDot={{r:8}}/>}
-                      {linhasAtivas.gastos&&<Line type="monotone" dataKey="gastos" stroke="#ef4444" strokeWidth={2} name="Total Gastos" dot={{r:6,cursor:"pointer",fill:"#ef4444"}} activeDot={{r:8}}/>}
-                      {linhasAtivas.fixos&&<Line type="monotone" dataKey="fixos" stroke="#6b7280" strokeWidth={2} strokeDasharray="3 3" name="Fixos" dot={{r:5,cursor:"pointer",fill:"#6b7280"}} activeDot={{r:7}}/>}
+                      {linhasAtivas.gastos&&<Line type="monotone" dataKey="gastos" stroke="#ef4444" strokeWidth={2} name="Gastos (fatura atual)" dot={{r:6,cursor:"pointer",fill:"#ef4444"}} activeDot={{r:8}}/>}
+                      {linhasAtivas.saidas&&<Line type="monotone" dataKey="saidas" stroke="#f97316" strokeWidth={2} strokeDasharray="3 3" name="Saídas (fatura+débitos)" dot={{r:5,cursor:"pointer",fill:"#f97316"}} activeDot={{r:7}}/>}
                       {orcamentos.filter(o=>linhasOrc[o.id]===true).map(o=>(
                         <Line key={o.id} type="monotone" dataKey={o.id} stroke={o.cor} strokeWidth={1.5} name={o.nome} dot={{r:4,cursor:"pointer",fill:o.cor}} activeDot={{r:6}}/>
                       ))}
