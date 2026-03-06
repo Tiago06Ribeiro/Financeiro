@@ -436,17 +436,21 @@ export default function Dashboard({ userEmail, onLogout }) {
   const totalFaturasAnteriorPendentes = totalFaturasPendentesNoMes;
   const totalFaturasAnterior = faturasCreditoDoMes.reduce((s,f)=>s+f.total,0);
 
-  // Fatura atual = o que está acumulando agora e será pago no próximo mês
-  // Para cada cartão: buildFatura no mês que fecha agora (que será pago no próximo mês)
+  const getFaturaAberta = (ct, refA, refM, refD) => {
+    if (ct.tipo !== "credito") return null;
+    const fech = ct.fechamento || 1;
+    if (fech >= 28) return { fatM: refM, fatA: refA };
+    if (refD <= fech) return { fatM: refM, fatA: refA };
+    const nM = (refM + 1) % 12;
+    const nA = refM === 11 ? refA + 1 : refA;
+    return { fatM: nM, fatA: nA };
+  };
   const faturaAtualPorConta = contas.filter(ct =>
     ct.tipo === "credito" && (userFilter === "Todos" || ct.usuario === userFilter)
   ).map(ct => {
-    const endOfMonth = (ct.fechamento || 1) >= 28;
-    // fatura que será PAGA no próximo mês: fechou em mes (end-of-month) ou fecha em mes (normal)
-    const fatM = endOfMonth ? mes : nextFatMes;
-    const fatA = endOfMonth ? ano : nextFatAno;
+    const { fatM, fatA } = getFaturaAberta(ct, ano, mes, TODAY_DAY);
     const f = buildFatura(ct, fatM, fatA);
-    return f ? { conta: ct, ...f } : null;
+    return f ? { conta: ct, fatM, fatA, ...f } : null;
   }).filter(Boolean).filter(f => f.total > 0);
   const totalFaturaAtual = faturaAtualPorConta.reduce((s,f)=>s+f.total,0);
 
@@ -475,9 +479,7 @@ export default function Dashboard({ userEmail, onLogout }) {
         return { name, valor: gastosContaMes(ct.id,mes,ano), cor: ct.cor, id: ct.id };
       }
       // crédito: fatura atual = o que fecha agora e será pago no próximo mês
-      const endOfMonth = (ct.fechamento || 1) >= 28;
-      const fatM = endOfMonth ? mes : nextFatMes;
-      const fatA = endOfMonth ? ano : nextFatAno;
+      const { fatM, fatA } = getFaturaAberta(ct, ano, mes, TODAY_DAY);
       const f = buildFatura(ct, fatM, fatA);
       return { name, valor: f ? f.total : 0, cor: ct.cor, id: ct.id };
     }).filter(d=>d.valor>0);
@@ -511,10 +513,10 @@ export default function Dashboard({ userEmail, onLogout }) {
     // gastos = fatura atual de cada cartão (o que está acumulando, será pago no próximo mês)
     // saidas = faturas pagas neste mês + débitos diretos
     const nxtM = (m+1)%12; const nxtA = m===11?a+1:a;
+    const tRefDay = (m===mes&&a===ano) ? TODAY_DAY : new Date(a,m+1,0).getDate();
     const gastosCartoes = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
-      const eom=(ct.fechamento||1)>=28;
-      const fatM=eom?m:nxtM; const fatA=eom?a:nxtA;
-      const f=buildFatura(ct,fatM,fatA);
+      const { fatM: gFatM, fatA: gFatA } = getFaturaAberta(ct, a, m, tRefDay);
+      const f=buildFatura(ct,gFatM,gFatA);
       return s+(f?f.total:0);
     },0);
     const debitosM = fixosAtivosM.filter(g=>{
@@ -548,9 +550,8 @@ export default function Dashboard({ userEmail, onLogout }) {
     });
     const byConta={};
     contas.filter(ct=>ct.tipo==="credito").forEach(ct=>{
-      const eom=(ct.fechamento||1)>=28;
-      const fatM=eom?m:nxtM; const fatA=eom?a:nxtA;
-      const f=buildFatura(ct,fatM,fatA);
+      const { fatM: bFatM, fatA: bFatA } = getFaturaAberta(ct, a, m, tRefDay);
+      const f=buildFatura(ct,bFatM,bFatA);
       byConta[ct.id]=f?f.total:0;
     });
     return {name:MONTHS[m],mes:m,ano:a,previsto:prev,realizado:real,gastos:gst,saidas,...byOrc,...byCat,...byConta,isCurrent:m===mes&&a===ano};
@@ -851,19 +852,16 @@ export default function Dashboard({ userEmail, onLogout }) {
                   return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,gastosAcum,previstoDia,...byCat,...byConta};
                 });
 
-                // Fatura atual do drill = o que fecha nesse mês e será pago no próximo
-                const drillNxtM=(drillM+1)%12; const drillNxtA=drillM===11?drillA+1:drillA;
+                // Fatura aberta no drill: usa getFaturaAberta com refDay correto
+                const drillRefDay = (drillM===CUR_MONTH&&drillA===CUR_YEAR) ? TODAY_DAY : new Date(drillA,drillM+1,0).getDate();
                 const faturaAtualDrill = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
-                  const eom=(ct.fechamento||1)>=28;
-                  const fatM=eom?drillM:drillNxtM; const fatA=eom?drillA:drillNxtA;
-                  const f=buildFatura(ct,fatM,fatA);
+                  const { fatM: dFatM, fatA: dFatA } = getFaturaAberta(ct, drillA, drillM, drillRefDay);
+                  const f=buildFatura(ct,dFatM,dFatA);
                   return s+(f?f.total:0);
                 },0);
-                // Lançamentos da fatura atual (para a lista)
                 const lancsFaturaAtual = contas.filter(ct=>ct.tipo==="credito").flatMap(ct=>{
-                  const eom=(ct.fechamento||1)>=28;
-                  const fatM=eom?drillM:drillNxtM; const fatA=eom?drillA:drillNxtA;
-                  const f=buildFatura(ct,fatM,fatA);
+                  const { fatM: dFatM, fatA: dFatA } = getFaturaAberta(ct, drillA, drillM, drillRefDay);
+                  const f=buildFatura(ct,dFatM,dFatA);
                   return f?f.lancamentos.map(l=>({...l,_ct:ct})):[];
                 });
 
@@ -883,8 +881,8 @@ export default function Dashboard({ userEmail, onLogout }) {
                       </div>
                       <div style={{display:"flex",gap:8,fontSize:11,flexWrap:"wrap"}}>
                         <span style={{color:"#22c55e"}}>✅ Recebido: {fmt(totalRealMes)}</span>
-                        <span style={{color:"#a855f7"}}>💳 Fatura atual: {fmt(faturaAtualDrill)}</span>
-                        <span style={{color:totalRealMes-faturaAtualDrill>=0?"#3b82f6":"#ef4444"}}>💰 Saldo prev.: {fmt(totalRealMes-faturaAtualDrill)}</span>
+                        <span style={{color:"#ef4444"}}>💸 Gastos: {fmt(faturaAtualDrill)}</span>
+                        <span style={{color:totalRealMes-faturaAtualDrill>=0?"#3b82f6":"#ef4444"}}>💰 Saldo: {fmt(totalRealMes-faturaAtualDrill)}</span>
                       </div>
                     </div>
 
@@ -948,7 +946,7 @@ export default function Dashboard({ userEmail, onLogout }) {
                     {/* Lançamentos da fatura atual, filtráveis por dia */}
                     {lancsFaturaAtual.length>0&&<div style={{marginTop:14,borderTop:"1px solid #f0ebe0",paddingTop:12}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                        <div style={{...S.label}}>💳 Fatura atual{diaFiltro?` — dia ${diaFiltro}`:""}</div>
+                        <div style={{...S.label}}>📋 Gastos de {MONTHS[drillM]}{diaFiltro?` — dia ${diaFiltro}`:""}</div>
                         {diaFiltro&&<button onClick={()=>setDiaFiltro(null)} style={{fontSize:11,color:"#9a8a6a",background:"#f0ebe0",border:"none",borderRadius:6,padding:"2px 8px",cursor:"pointer"}}>ver todos ✕</button>}
                       </div>
                       <div style={{maxHeight:240,overflowY:"auto"}}>
