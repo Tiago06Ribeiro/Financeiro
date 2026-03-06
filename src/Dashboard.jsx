@@ -745,18 +745,14 @@ export default function Dashboard({ userEmail, onLogout }) {
                     <span style={{color:"#9a8a6a"}}>faturas pagas</span>
                     <span style={{color:"#ef4444"}}>−{fmt(totalFaturasPagasNoMes)}</span>
                   </div>}
+                  {(()=>{const deb=gastosFixosDoMes.filter(g=>{const ct=g.conta?contas.find(x=>x.id===g.conta):null;return (ct?.tipo==="corrente"||(!g.conta&&g.debitoAuto))&&!gfPago(g.id);}).reduce((s,g)=>s+Number(g.valor),0);return deb>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:"#f59e0b"}}>⏳ débitos pendentes</span><span style={{color:"#f59e0b",fontWeight:600}}>{fmt(deb)}</span></div>})()}
                   {totalDebitosNoMes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                    <span style={{color:"#9a8a6a"}}>débitos pagos</span>
+                    <span style={{color:"#9a8a6a"}}> débitos pagos</span>
                     <span style={{color:"#ef4444"}}>−{fmt(totalDebitosNoMes)}</span>
                   </div>}
                   {totalFaturasPendentesNoMes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
                     <span style={{color:"#f59e0b"}}>⏳ faturas pendentes</span>
                     <span style={{color:"#f59e0b",fontWeight:600}}>{fmt(totalFaturasPendentesNoMes)}</span>
-                  </div>}
-                   {(()=>{const deb=gastosFixosDoMes.filter(g=>{const ct=g.conta?contas.find(x=>x.id===g.conta):null;return (ct?.tipo==="corrente"||(!g.conta&&g.debitoAuto))&&!gfPago(g.id);}).reduce((s,g)=>s+Number(g.valor),0);return deb>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:"#f59e0b"}}>⏳ débitos pendentes</span><span style={{color:"#f59e0b",fontWeight:600}}>{fmt(deb)}</span></div>})()}
-                  {totalDebitosNoMes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                    <span style={{color:"#9a8a6a"}}>✅ débitos pagos</span>
-                    <span style={{color:"#22c55e"}}>{fmt(totalDebitosNoMes)}</span>
                   </div>}
                 </div>
               </div>
