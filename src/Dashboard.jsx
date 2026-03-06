@@ -400,10 +400,14 @@ export default function Dashboard({ userEmail, onLogout }) {
   const nextFatAno = mes === 11 ? ano + 1 : ano;
 
   // Faturas de crédito que vencem NESTE mês (para cálculo de saldo)
+  // Para cartões que fecham no fim do mês (Mariana): a fatura PAGA em mes/ano fechou em mes-1/ano
   const faturasCreditoDoMes = contas.filter(ct =>
     ct.tipo === "credito" && (userFilter === "Todos" || ct.usuario === userFilter)
   ).map(ct => {
-    const f = buildFatura(ct, mes, ano);
+    const endOfMonth = (ct.fechamento || 1) >= 28;
+    const fatM = endOfMonth ? (mes - 1 + 12) % 12 : mes;
+    const fatA = endOfMonth ? (mes === 0 ? ano - 1 : ano) : ano;
+    const f = buildFatura(ct, fatM, fatA);
     return f ? { conta: ct, ...f } : null;
   }).filter(Boolean).filter(f => f.total > 0);
 
