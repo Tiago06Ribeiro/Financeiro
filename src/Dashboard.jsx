@@ -436,7 +436,7 @@ export default function Dashboard({ userEmail, onLogout }) {
   const gastosPorContaData = contas
     .filter(ct => userFilter==="Todos" || ct.usuario===userFilter)
     .map(ct => ({
-      name: ct.nome.replace(" Mariana","").replace(" Tiago","").replace("Nubank","Nu"),
+      name: ct.nome.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio"),
       valor: gastosContaMes(ct.id,mes,ano),
       cor: ct.cor,
       id: ct.id,
@@ -803,7 +803,7 @@ export default function Dashboard({ userEmail, onLogout }) {
                           color:linhasOrc[ct.id]?ct.cor:"#9a8a6a",
                           border:`1px solid ${linhasOrc[ct.id]?ct.cor:"#e0dbd0"}`,
                           borderRadius:20,padding:"3px 12px",fontSize:11,fontWeight:700,cursor:"pointer"
-                        }}>{ct.emoji} {ct.nome.replace(" Mariana","").replace(" Tiago","")}</button>
+                        }}>{ct.emoji} {ct.nome.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio")}</button>
                       ))}
                     </div>
 
@@ -823,7 +823,7 @@ export default function Dashboard({ userEmail, onLogout }) {
                           <Line key={c.id} type="monotone" dataKey={c.id} stroke={c.cor} strokeWidth={1.5} strokeDasharray="4 2" name={c.nome} dot={{r:2}}/>
                         ))}
                         {contas.filter(ct=>ct.tipo==="credito"&&linhasOrc[ct.id]).map(ct=>(
-                          <Line key={ct.id} type="monotone" dataKey={ct.id} stroke={ct.cor} strokeWidth={1.5} name={ct.nome.replace(" Mariana","").replace(" Tiago","")} dot={{r:3}}/>
+                          <Line key={ct.id} type="monotone" dataKey={ct.id} stroke={ct.cor} strokeWidth={1.5} name={ct.nome.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio")} dot={{r:3}}/>
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
