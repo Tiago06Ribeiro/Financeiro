@@ -5,12 +5,12 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey:            "COLE_AQUI",
-  authDomain:        "COLE_AQUI",
-  projectId:         "COLE_AQUI",
-  storageBucket:     "COLE_AQUI",
-  messagingSenderId: "COLE_AQUI",
-  appId:             "COLE_AQUI",
+ apiKey: "AIzaSyAP1mF0x2W921oHxKOi39sVjDymuAdFtdI",
+  authDomain: "financas-31196.firebaseapp.com",
+  projectId: "financas-31196",
+  storageBucket: "financas-31196.firebasestorage.app",
+  messagingSenderId: "768832957740",
+  appId: "1:768832957740:web:10534a660a202f97951089"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -19,6 +19,6 @@ export const googleProvider = new GoogleAuthProvider();
 
 // ✅ Só esses emails conseguem entrar
 export const ALLOWED_EMAILS = [
-  "seu-email@gmail.com",
-  "email-da-mariana@gmail.com",
+  "tiagoribeiromartins.c@gmail.com",
+  "warianaabreu@gmail.com",
 ];
