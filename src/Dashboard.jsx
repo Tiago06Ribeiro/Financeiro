@@ -1007,14 +1007,15 @@ export default function Dashboard({ userEmail, onLogout }) {
                             const cat=catById(g.categoria);
                             const conta=g._ct||contaById(g.conta);
                             const diaLanc=g.data?Number(g.data.split("-")[2]):(g.diaPagamento||"?");
+                            const dataLabel=g.data?`${PAD(Number(g.data.split("-")[2]))}/${PAD(Number(g.data.split("-")[1]))}`:(g.diaPagamento?`${PAD(g.diaPagamento)}/${PAD(drillM+1)}`:"?");
                             return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"5px 0",borderBottom:"1px solid #f0ebe0",cursor:"pointer",background:diaFiltro===diaLanc?"#fefce8":"transparent"}}
                               onClick={()=>setDiaFiltro(prev=>prev===diaLanc?null:diaLanc)}>
                               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                                <span style={{background:"#f0ebe0",borderRadius:6,padding:"1px 7px",fontWeight:600,color:"#7a6a4a",fontSize:11}}>dia {diaLanc}</span>
+                                <span style={{background:"#f0ebe0",borderRadius:6,padding:"1px 7px",fontWeight:600,color:"#7a6a4a",fontSize:11}}>{dataLabel}</span>
                                 <span>{g.descricao}</span>
                                 {g.tipo==="fixo"&&<span style={{fontSize:10,color:"#9a8a6a",background:"#f0ebe0",borderRadius:4,padding:"1px 5px"}}>fixo</span>}
                                 {cat&&<span style={{...S.tag(cat.cor),fontSize:10}}>{cat.emoji} {cat.nome}</span>}
-                                {conta&&<span style={{...S.tag(conta.cor||"#9a8a6a"),fontSize:10}}>{conta.emoji}</span>}
+                                {conta&&<span style={{...S.tag(conta.cor||"#9a8a6a"),fontSize:10}}>{conta.emoji} {shortName(conta.nome)}</span>}
                               </div>
                               <span style={{color:"#ef4444",fontWeight:600}}>{fmt(g.valor)}</span>
                             </div>;
