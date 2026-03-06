@@ -469,20 +469,23 @@ export default function Dashboard({ userEmail, onLogout }) {
     return s+(recebido?0:Number(r.previsto));
   },0);
   const tudo100 = totalPrevisto>0 && totalPendente===0;
-  // Gastos por conta = fatura atual acumulada (que será paga no próximo mês)
+  const shortName = (n) => n.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio");
+  // Gastos por conta — stacked: fatMes (pagar este mês) + fatProx (pagar próximo mês)
   const gastosPorContaData = contas
     .filter(ct => userFilter==="Todos" || ct.usuario===userFilter)
     .map(ct => {
-      const name = ct.nome.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio");
+      const name = shortName(ct.nome);
       if (ct.tipo !== "credito") {
-        // corrente: gastos diretos do mês
-        return { name, valor: gastosContaMes(ct.id,mes,ano), cor: ct.cor, id: ct.id };
+        return { name, fatMes: gastosContaMes(ct.id,mes,ano), fatProx: 0, cor: ct.cor, id: ct.id };
       }
-      // crédito: fatura atual = o que fecha agora e será pago no próximo mês
-      const { fatM, fatA } = getFaturaAberta(ct, ano, mes, TODAY_DAY);
-      const f = buildFatura(ct, fatM, fatA);
-      return { name, valor: f ? f.total : 0, cor: ct.cor, id: ct.id };
-    }).filter(d=>d.valor>0);
+      const eom = (ct.fechamento||1) >= 28;
+      const fmM = eom ? (mes-1+12)%12 : mes;
+      const fmA = eom ? (mes===0?ano-1:ano) : ano;
+      const fMes = buildFatura(ct, fmM, fmA);
+      const { fatM: fpM, fatA: fpA } = getFaturaAberta(ct, ano, mes, TODAY_DAY);
+      const fProx = buildFatura(ct, fpM, fpA);
+      return { name, fatMes: fMes?fMes.total:0, fatProx: fProx?fProx.total:0, cor: ct.cor, id: ct.id };
+    }).filter(d=>d.fatMes>0||d.fatProx>0);
 
   // Próximo mês previsto (para quando 100% realizado)
   const proxMes = (mes+1)%12;
@@ -787,7 +790,7 @@ export default function Dashboard({ userEmail, onLogout }) {
 
                 // build day-by-day cumulative data
                 let saldoAcum = 0;
-                let gastosAcum = 0;
+                let debitosAcum = 0;
                 const dayData = Array.from({length:diasNoMes},(_,i)=>{
                   const dia = i+1;
                   // receitas do dia
@@ -811,7 +814,18 @@ export default function Dashboard({ userEmail, onLogout }) {
                   const gstDia = gstVarDia + gstFixoDia;
 
                   saldoAcum += recDia - gstDia;
-                  gastosAcum += gstDia;
+                  const debitosDia = gstMes.filter(g=>{
+                    if(!g.data) return false;
+                    const [gy,gm,gd]=g.data.split("-");
+                    if(!(Number(gd)===dia&&Number(gm)-1===drillM&&Number(gy)===drillA)) return false;
+                    const ct2=contaById(g.conta);
+                    return !ct2||ct2.tipo!=="credito";
+                  }).reduce((s,g)=>s+Number(g.valor),0)
+                  + fixosAtivosDrill.filter(g=>{
+                    const ct2=contaById(g.conta);
+                    return Number(g.diaPagamento)===dia&&(!ct2||ct2.tipo!=="credito");
+                  }).reduce((s,g)=>s+Number(g.valor),0);
+                  debitosAcum += debitosDia;
 
                   // por categoria (variáveis + fixos)
                   const byCat={};
@@ -880,7 +894,7 @@ export default function Dashboard({ userEmail, onLogout }) {
                     const f=buildFatura(ct,fatM,fatA);
                     return s+(f?f.total:0);
                   },0);
-                  return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,gastosAcum,previstoDia,fatMesAtual:fatMesAtual||null,fatProxMes:fatProxMes||null,...byCat,...byConta};
+                  return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,debitosAcum,previstoDia,fatMesAtual:fatMesAtual||null,fatProxMes:fatProxMes||null,...byCat,...byConta};
                 });
 
                 const drillNxtM2=(drillM+1)%12;
@@ -922,7 +936,7 @@ export default function Dashboard({ userEmail, onLogout }) {
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
                       {[
                         {k:"saldoAcum",label:"Saldo acumulado",cor:"#3b82f6"},
-                        {k:"gastosAcum",label:"Gastos acumulados",cor:"#ef4444"},
+                        {k:"debitosAcum",label:"Débitos acumulados",cor:"#f97316"},
                         {k:"recDia",label:"Receitas do dia",cor:"#22c55e"},
                         {k:"gstDia",label:"Gastos do dia",cor:"#f97316"},
                         {k:"previstoDia",label:"Previsto do dia",cor:"#b8a888"},
@@ -964,7 +978,7 @@ export default function Dashboard({ userEmail, onLogout }) {
                         <Tooltip formatter={(v,n)=>[fmt(v),n]} contentStyle={{background:"white",border:"1px solid #d4c8a8",borderRadius:8,fontSize:11}}
                           labelFormatter={l=>`Dia ${l}`}/>
                         {linhasAtivas["saldoAcum"]!==false&&<Line type="monotone" dataKey="saldoAcum" stroke="#3b82f6" strokeWidth={2} name="Saldo acumulado" dot={false}/>}
-                        {linhasAtivas["gastosAcum"]!==false&&<Line type="monotone" dataKey="gastosAcum" stroke="#ef4444" strokeWidth={2} name="Gastos acumulados" dot={false}/>}
+                        {linhasAtivas["debitosAcum"]!==false&&<Line type="monotone" dataKey="debitosAcum" stroke="#f97316" strokeWidth={2} name="Débitos acumulados" dot={false}/>}
                         {linhasAtivas["recDia"]!==false&&<Line type="monotone" dataKey="recDia" stroke="#22c55e" strokeWidth={1.5} name="Receitas do dia" dot={{r:4}}/>}
                         {linhasAtivas["gstDia"]!==false&&<Line type="monotone" dataKey="gstDia" stroke="#f97316" strokeWidth={1.5} name="Gastos do dia" dot={{r:3}}/>}
                         {linhasAtivas["previstoDia"]!==false&&<Line type="monotone" dataKey="previstoDia" stroke="#d4c8a8" strokeWidth={1.5} strokeDasharray="5 3" name="Previsto do dia" dot={{r:3}}/>}
@@ -1148,22 +1162,23 @@ export default function Dashboard({ userEmail, onLogout }) {
 
             {/* Gastos por conta */}
             {gastosPorContaData.length > 0 && <div style={S.card}>
-              <div style={{...S.label,marginBottom:14}}>💳 Gastos por conta — {MONTHS[mes]}/{ano}</div>
+              <div style={{...S.label,marginBottom:6}}>💳 Gastos por conta — {MONTHS[mes]}/{ano}</div>
+              <div style={{display:"flex",gap:14,marginBottom:10,fontSize:11,color:"#9a8a6a"}}>
+                <span><span style={{display:"inline-block",width:10,height:10,borderRadius:2,background:"#ef4444",marginRight:4}}/>Fatura {MONTHS[mes]}</span>
+                <span><span style={{display:"inline-block",width:10,height:10,borderRadius:2,background:"#a855f7",marginRight:4}}/>Fatura {MONTHS[nextFatMes]}</span>
+              </div>
               <ResponsiveContainer width="100%" height={160}>
                 <BarChart data={gastosPorContaData} margin={{top:0,right:10,left:0,bottom:0}}>
                   <XAxis dataKey="name" tick={{fontSize:11,fill:"#9a8a6a"}} axisLine={false} tickLine={false}/>
                   <YAxis tick={{fontSize:10,fill:"#9a8a6a"}} axisLine={false} tickLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(1)}k`:v}/>
-                  <Tooltip formatter={(v,_n,p)=>[fmt(v), p.payload.name]} contentStyle={{background:"white",border:"1px solid #d4c8a8",borderRadius:8,fontSize:12}}/>
-                  <Bar dataKey="valor" radius={[6,6,0,0]} isAnimationActive={false}>
-                    {gastosPorContaData.map((d)=>(
-                      <Cell key={d.id} fill={d.cor}/>
-                    ))}
-                  </Bar>
+                  <Tooltip formatter={(v,n)=>[fmt(v),n]} contentStyle={{background:"white",border:"1px solid #d4c8a8",borderRadius:8,fontSize:12}}/>
+                  <Bar dataKey="fatMes" name={`Fatura ${MONTHS[mes]}`} stackId="a" fill="#ef4444" isAnimationActive={false}/>
+                  <Bar dataKey="fatProx" name={`Fatura ${MONTHS[nextFatMes]}`} stackId="a" fill="#a855f7" radius={[6,6,0,0]} isAnimationActive={false}/>
                 </BarChart>
               </ResponsiveContainer>
               <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:8}}>
                 {gastosPorContaData.map(d=>(
-                  <span key={d.id} style={{...S.tag(d.cor),fontSize:11}}>{d.name}: {fmt(d.valor)}</span>
+                  <span key={d.id} style={{...S.tag(d.cor),fontSize:11}}>{d.name}: {fmt(d.fatMes+d.fatProx)}</span>
                 ))}
               </div>
             </div>}
@@ -1637,9 +1652,9 @@ export default function Dashboard({ userEmail, onLogout }) {
                       <div style={{fontWeight:700,fontSize:15}}>{ct.nome}</div>
                       <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center",flexWrap:"wrap"}}>
                         <span style={S.tag(ct.usuario==="Tiago"?"#3b82f6":"#ec4899")}>{ct.usuario}</span>
-                        <span style={S.tag(isCred?"#f59e0b":"#22c55e")}>{isCred?"💳 crédito":"🏦 corrente/débito"}</span>
+                        <span style={S.tag(ct.tipo==="credito"?"#f59e0b":ct.tipo==="debito"?"#3b82f6":"#22c55e")}>{ct.tipo==="credito"?"💳 crédito":ct.tipo==="debito"?"💸 débito":"🏦 corrente"}</span>
                         {isCred&&ct.fechamento&&<span style={{fontSize:11,color:"#9a8a6a",background:"#f0ebe0",borderRadius:6,padding:"2px 7px"}}>fecha {ct.fechamento>=28?"último dia":`dia ${ct.fechamento}`}</span>}
-                        {ct.vencimento&&<span style={{fontSize:11,color:"#ef4444",background:"#fef2f2",borderRadius:6,padding:"2px 7px"}}>vence dia {ct.vencimento}</span>}
+                        {ct.vencimento&&<span style={{fontSize:11,color:"#ef4444",background:"#fef2f2",borderRadius:6,padding:"2px 7px"}}>vence {PAD(ct.vencimento)}/{PAD(mes+1)}</span>}
                       </div>
                     </div>
                   </div>
@@ -1667,7 +1682,7 @@ export default function Dashboard({ userEmail, onLogout }) {
                             <span style={{fontSize:12,fontWeight:700,color:f.paga?"#16a34a":f.canPay?"#92400e":"#7a6a4a"}}>{label}</span>
                             <span style={{fontSize:13,fontWeight:"bold",color:f.paga?"#16a34a":"#1a1208"}}>{fmt(f.total)}</span>
                             {f.paga&&<span style={{...S.tag("#22c55e"),fontSize:10}}>✅ paga</span>}
-                            {!f.paga&&f.canPay&&<span style={{...S.tag("#f59e0b"),fontSize:10}}>⏳ vence dia {ct.vencimento}</span>}
+                            {!f.paga&&f.canPay&&<span style={{...S.tag("#f59e0b"),fontSize:10}}>⏳ vence {PAD(ct.vencimento)}/{PAD(mes+1)}</span>}
                             {!f.paga&&!f.canPay&&<span style={{...S.tag("#9a8a6a"),fontSize:10}}>🔒 fatura aberta</span>}
                           </div>
                           {f.paga&&<div style={{fontSize:11,color:"#9a8a6a",marginTop:2}}>Pago em {fmtData(f.dataPagamento)}</div>}
@@ -1755,7 +1770,8 @@ export default function Dashboard({ userEmail, onLogout }) {
                     </select>
                     <select style={S.select} value={formConta.tipo} onChange={e=>setFormConta(f=>({...f,tipo:e.target.value,vencimento:e.target.value==="corrente"?"":f.vencimento}))}>
                       <option value="credito">💳 Crédito</option>
-                      <option value="corrente">🏦 Corrente/Débito</option>
+                      <option value="corrente">🏦 Corrente</option>
+                      <option value="debito">💸 Débito</option>
                     </select>
                   </div>
                   {formConta.tipo==="credito"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -1962,7 +1978,8 @@ export default function Dashboard({ userEmail, onLogout }) {
                   </select>
                   <select style={S.select} value={editando.dados.tipo||"credito"} onChange={e=>setEditando(ed=>({...ed,dados:{...ed.dados,tipo:e.target.value}}))}>
                     <option value="credito">💳 Crédito</option>
-                    <option value="corrente">🏦 Corrente/Débito</option>
+                    <option value="corrente">🏦 Corrente</option>
+                    <option value="debito">💸 Débito</option>
                   </select>
                 </div>
                 {(editando.dados.tipo||"credito")==="credito"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
