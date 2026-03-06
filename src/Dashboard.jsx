@@ -135,7 +135,7 @@ export default function Dashboard({ userEmail, onLogout }) {
   const [contas, setContas, _r2] = useCloud("contas", DEFAULT_CONTAS);
   const [orcamentos, setOrcamentos] = useCloud("orcamentos", DEFAULT_ORCAMENTOS);
   const [receitas, setReceitas, _r3] = useCloud("receitas", DEFAULT_RECEITAS);
-  const [realizados, setRealizados] = useState(DEFAULT_REALIZADOS);
+  const [realizados, setRealizados] = useCloud("realizados", DEFAULT_REALIZADOS);
   const [gastos, setGastos, _r4] = useCloud("gastos", []);
   const [gastosFixos, setGastosFixos, _r5] = useCloud("gastosFixos", DEFAULT_GASTOS_FIXOS);
   const [pagosFixos, setPagosFixos] = useCloud("pagosFixos", {});
@@ -692,9 +692,9 @@ export default function Dashboard({ userEmail, onLogout }) {
                   },0);
                   // gastos do dia
                   const gstDia = gstMes.filter(g=>{
-                    if(!g.data) return dia===1; // gastos sem data contam no dia 1
-                    const [gy,gm,gd]=g.data.split("-");
-                    return Number(gd)===dia&&Number(gm)-1===drillM&&Number(gy)===drillA;
+                    if(!g.data) return false;
+                    const [,gm,gd]=g.data.split("-");
+                    return Number(gd)===dia&&Number(gm)-1===drillM;
                   }).reduce((s,g)=>s+Number(g.valor),0);
 
                   saldoAcum += recDia - gstDia;
@@ -704,9 +704,9 @@ export default function Dashboard({ userEmail, onLogout }) {
                   const byCat={};
                   catsGasto.forEach(c=>{
                     byCat[c.id]=gstMes.filter(g=>{
-                      if(!g.data) return g.categoria===c.id&&dia===1;
-                      const [gy,gm,gd]=g.data.split("-");
-                      return g.categoria===c.id&&Number(gd)===dia&&Number(gm)-1===drillM&&Number(gy)===drillA;
+                      if(!g.data) return false;
+                      const [,gm,gd]=g.data.split("-");
+                      return g.categoria===c.id&&Number(gd)===dia&&Number(gm)-1===drillM;
                     }).reduce((s,g)=>s+Number(g.valor),0);
                   });
 
@@ -720,28 +720,10 @@ export default function Dashboard({ userEmail, onLogout }) {
                     }
                     return dia===d?s+Number(r.previsto):s;
                   },0);
-                  // por conta/cartão
-                  const byConta={};
-                  contas.filter(ct=>ct.tipo==="credito").forEach(ct=>{
-                    byConta[ct.id]=gstMes.filter(g=>{
-                      if(g.conta!==ct.id) return false;
-                      if(!g.data) return dia===1;
-                      const [gy,gm,gd]=g.data.split("-");
-                      return Number(gd)===dia&&Number(gm)-1===drillM&&Number(gy)===drillA;
-                    }).reduce((s,g)=>s+Number(g.valor),0);
-                  });
-                  return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,gastosAcum,previstoDia,...byCat,...byConta};
+                  return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,gastosAcum,previstoDia,...byCat};
                 });
 
-                // Include gastos fixos ativos no mês do drill
-                const fixosAtivosDrill = gastosFixos.filter(g=>{
-                  const cur=`${drillA}-${PAD(drillM+1)}`;
-                  if(g.vigenciaInicio && cur<g.vigenciaInicio) return false;
-                  if(g.vigenciaFim && cur>g.vigenciaFim) return false;
-                  return true;
-                });
-                const totalGstMes = gstMes.reduce((s,g)=>s+Number(g.valor),0)
-                  + fixosAtivosDrill.reduce((s,g)=>s+Number(g.valor),0);
+                const totalGstMes = gstMes.reduce((s,g)=>s+Number(g.valor),0);
 
                 return (
                   <div style={S.card}>
@@ -786,15 +768,6 @@ export default function Dashboard({ userEmail, onLogout }) {
                           borderRadius:20,padding:"3px 12px",fontSize:11,fontWeight:700,cursor:"pointer"
                         }}>{c.emoji} {c.nome}</button>
                       ))}
-                      <span style={{fontSize:11,color:"#c0b8a0",margin:"4px 4px 0"}}>Cartões:</span>
-                      {contas.filter(ct=>ct.tipo==="credito").map(ct=>(
-                        <button key={ct.id} onClick={()=>setLinhasOrc(prev=>({...prev,[ct.id]:!prev[ct.id]}))} style={{
-                          background:linhasOrc[ct.id]?ct.cor+"22":"#f0ebe0",
-                          color:linhasOrc[ct.id]?ct.cor:"#9a8a6a",
-                          border:`1px solid ${linhasOrc[ct.id]?ct.cor:"#e0dbd0"}`,
-                          borderRadius:20,padding:"3px 12px",fontSize:11,fontWeight:700,cursor:"pointer"
-                        }}>{ct.emoji} {ct.nome.replace(" Mariana","").replace(" Tiago","")}</button>
-                      ))}
                     </div>
 
                     <ResponsiveContainer width="100%" height={260}>
@@ -811,9 +784,6 @@ export default function Dashboard({ userEmail, onLogout }) {
                         {linhasAtivas["previstoDia"]!==false&&<Line type="monotone" dataKey="previstoDia" stroke="#d4c8a8" strokeWidth={1.5} strokeDasharray="5 3" name="Previsto do dia" dot={{r:3}}/>}
                         {catsGasto.filter(c=>linhasCat[c.id]===true).map(c=>(
                           <Line key={c.id} type="monotone" dataKey={c.id} stroke={c.cor} strokeWidth={1.5} strokeDasharray="4 2" name={c.nome} dot={{r:2}}/>
-                        ))}
-                        {contas.filter(ct=>ct.tipo==="credito"&&linhasOrc[ct.id]).map(ct=>(
-                          <Line key={ct.id} type="monotone" dataKey={ct.id} stroke={ct.cor} strokeWidth={1.5} name={ct.nome} dot={{r:3}}/>
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
