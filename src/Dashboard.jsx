@@ -849,9 +849,30 @@ export default function Dashboard({ userEmail, onLogout }) {
                     }
                     return dia===d?s+Number(r.previsto):s;
                   },0);
-                  return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,gastosAcum,previstoDia,...byCat,...byConta};
+                  // faturas por mês de pagamento — linhas constantes no gráfico
+                  // fatMesAtual = soma das faturas pagas NESTE mês (drillM/drillA)
+                  // fatProxMes  = soma das faturas pagas NO PRÓXIMO mês
+                  // São constantes (mesmo valor em cada dia), mas calculadas aqui para ficar no dayData
+                  const fatMesAtual = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
+                    const eom=(ct.fechamento||1)>=28;
+                    // fatura paga em drillM = fechou em drillM-1 (eom) ou em drillM (normal)
+                    const fatM=eom?(drillM-1+12)%12:drillM;
+                    const fatA=eom?(drillM===0?drillA-1:drillA):drillA;
+                    const f=buildFatura(ct,fatM,fatA);
+                    return s+(f?f.total:0);
+                  },0);
+                  const drillNxtM=(drillM+1)%12; const drillNxtA=drillM===11?drillA+1:drillA;
+                  const fatProxMes = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
+                    const eom=(ct.fechamento||1)>=28;
+                    const fatM=eom?drillM:drillNxtM;
+                    const fatA=eom?drillA:drillNxtA;
+                    const f=buildFatura(ct,fatM,fatA);
+                    return s+(f?f.total:0);
+                  },0);
+                  return {name:`${dia}`,dia,recDia,gstDia,saldoAcum,gastosAcum,previstoDia,fatMesAtual,fatProxMes,...byCat,...byConta};
                 });
 
+                const drillNxtM2=(drillM+1)%12;
                 // Fatura aberta no drill: usa getFaturaAberta com refDay correto
                 const drillRefDay = (drillM===CUR_MONTH&&drillA===CUR_YEAR) ? TODAY_DAY : new Date(drillA,drillM+1,0).getDate();
                 const faturaAtualDrill = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
@@ -894,6 +915,8 @@ export default function Dashboard({ userEmail, onLogout }) {
                         {k:"recDia",label:"Receitas do dia",cor:"#22c55e"},
                         {k:"gstDia",label:"Gastos do dia",cor:"#f97316"},
                         {k:"previstoDia",label:"Previsto do dia",cor:"#b8a888"},
+                        {k:"fatMesAtual",label:`Fatura ${MONTHS[drillM]} (pagar ${MONTHS[drillM]})`,cor:"#ef4444"},
+                        {k:"fatProxMes",label:`Fatura ${MONTHS[drillNxtM2]} (pagar ${MONTHS[drillNxtM2]})`,cor:"#a855f7"},
                       ].map(l=>(
                         <button key={l.k} onClick={()=>toggleLinha(l.k)} style={{
                           background:linhasAtivas[l.k]!==false?l.cor+"22":"#f0ebe0",
@@ -940,6 +963,8 @@ export default function Dashboard({ userEmail, onLogout }) {
                         {contas.filter(ct=>ct.tipo==="credito"&&linhasOrc[ct.id]).map(ct=>(
                           <Line key={ct.id} type="monotone" dataKey={ct.id} stroke={ct.cor} strokeWidth={1.5} name={ct.nome.replace("Nubank PJ Mariana","Nu PJ").replace("Nubank Mariana","Nu Mari").replace("Nubank Tiago","Nu Tiago").replace("Digio Tiago","Digio")} dot={{r:3}}/>
                         ))}
+                        {linhasAtivas["fatMesAtual"]!==false&&<Line type="monotone" dataKey="fatMesAtual" stroke="#ef4444" strokeWidth={2} strokeDasharray="6 3" name={`Fatura ${MONTHS[drillM]} (pagar ${MONTHS[drillM]})`} dot={false}/>}
+                        {linhasAtivas["fatProxMes"]!==false&&<Line type="monotone" dataKey="fatProxMes" stroke="#a855f7" strokeWidth={2} strokeDasharray="6 3" name={`Fatura ${MONTHS[drillNxtM2]} (pagar ${MONTHS[drillNxtM2]})`} dot={false}/>}
                       </LineChart>
                     </ResponsiveContainer>
 
