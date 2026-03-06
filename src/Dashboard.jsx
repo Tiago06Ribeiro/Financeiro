@@ -857,14 +857,14 @@ export default function Dashboard({ userEmail, onLogout }) {
                     .reduce((mx,ct)=>Math.max(mx,ct.fechamento||1),0);
                   // dia <= maxFechNormal → fatura março ainda aberta (ou eom sempre aberta)
                   // Para cada dia: incluir cartão na fatura março se o dia ainda está no ciclo dele
+                  // Fatura Mar = apenas cartões normais (fecha < 28), e só até o dia de fechamento
+                  // Cartões eom: a fatura paga em março fechou em fevereiro — não aparece aqui
                   const fatMesAtual = contas.filter(ct=>ct.tipo==="credito").reduce((s,ct)=>{
                     const eom=(ct.fechamento||1)>=28;
+                    if(eom) return s; // eom: fatura paga em março já fechou em fev, não entra
                     const fech=ct.fechamento||1;
-                    // cartão entra na linha março se o dia ainda está dentro do ciclo dele
-                    if(!eom && dia>fech) return s; // ciclo desse cartão já virou
-                    const fatM=eom?(drillM-1+12)%12:drillM;
-                    const fatA=eom?(drillM===0?drillA-1:drillA):drillA;
-                    const f=buildFatura(ct,fatM,fatA);
+                    if(dia>fech) return s; // ciclo já virou para esse cartão
+                    const f=buildFatura(ct,drillM,drillA);
                     return s+(f?f.total:0);
                   },0);
                   const drillNxtM=(drillM+1)%12; const drillNxtA=drillM===11?drillA+1:drillA;
