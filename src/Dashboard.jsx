@@ -464,7 +464,6 @@ export default function Dashboard({ userEmail, onLogout }) {
       const ct = g.conta ? contas.find(x=>x.id===g.conta) : null;
       return ct?.tipo === "corrente" || (!g.conta && g.debitoAuto);
     }).reduce((s,g) => s+Number(g.valor), 0);
-  const saldoPrevisto = totalPrevisto - totalFaturaAtual - totalDebitosPrevisto;
 
   // Previsto = só o que ainda falta receber (pendente)
   const totalPendente = receitasDoMes.reduce((s,r)=>{
@@ -498,6 +497,15 @@ export default function Dashboard({ userEmail, onLogout }) {
     .filter(r=>r.recorrente||r.mesPrevisto===proxMes)
     .filter(r=>userFilter==="Todos"||r.usuario===userFilter)
     .reduce((s,r)=>s+Number(r.previsto),0);
+  const totalDebitosProxMes = gastosFixos.filter(g => {
+    const cur=`${proxAno}-${PAD(proxMes+1)}`;
+    if(g.vigenciaInicio && cur<g.vigenciaInicio) return false;
+    if(g.vigenciaFim && cur>g.vigenciaFim) return false;
+    if(userFilter!=="Todos"&&g.usuario!==userFilter) return false;
+    const ct = g.conta ? contas.find(x=>x.id===g.conta) : null;
+    return ct?.tipo === "corrente" || (!g.conta && g.debitoAuto);
+  }).reduce((s,g)=>s+Number(g.valor),0);
+  const saldoPrevisto = totalProxMes - totalFaturaAtual - totalDebitosProxMes;
 
   const timeline = Array.from({length:7},(_,i)=>{
     const offset=i-3;
@@ -697,28 +705,27 @@ export default function Dashboard({ userEmail, onLogout }) {
                 </div>
               </div>
 
-              {/* Card 2: Gastos — faturas anteriores + fatura atual */}
-              <div style={S.card}>
-                <div style={{fontSize:20,marginBottom:4}}>💸</div>
-                <div style={S.label}>Gastos do mês</div>
-                <div style={S.val("#ef4444")}>{fmt(totalFaturasAnterior + totalDebitosNoMes)}</div>
+              {/* Card 2: A pagar este mês */}
+              <div style={{...S.card,background:totalFaturasPendentesNoMes>0?"#fffbeb":"white",border:totalFaturasPendentesNoMes>0?"1px solid #fde68a":"none"}}>
+                <div style={{fontSize:20,marginBottom:4}}>📅</div>
+                <div style={S.label}>A pagar — {MONTHS[mes]}</div>
+                <div style={S.val(totalFaturasPendentesNoMes>0?"#f59e0b":"#22c55e")}>{fmt(totalFaturasPendentesNoMes + (gastosFixosDoMes.filter(g=>{const ct=g.conta?contas.find(x=>x.id===g.conta):null;return (ct?.tipo==="corrente"||(!g.conta&&g.debitoAuto))&&!gfPago(g.id);}).reduce((s,g)=>s+Number(g.valor),0)))}</div>
                 <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
-                  {totalFaturasAnterior>0&&<>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                      <span style={{color:"#9a8a6a"}}>faturas pagas este mês</span>
-                      <span style={{color:totalFaturasAnteriorPendentes>0?"#f59e0b":"#ef4444",fontWeight:600}}>{fmt(totalFaturasAnterior)}</span>
-                    </div>
-                    {totalFaturasAnteriorPendentes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                      <span style={{color:"#f59e0b"}}>⏳ pendentes</span>
-                      <span style={{color:"#f59e0b"}}>−{fmt(totalFaturasAnteriorPendentes)}</span>
-                    </div>}
-                  </>}
+                  {totalFaturasPendentesNoMes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
+                    <span style={{color:"#f59e0b"}}>⏳ faturas pendentes</span>
+                    <span style={{color:"#f59e0b",fontWeight:600}}>{fmt(totalFaturasPendentesNoMes)}</span>
+                  </div>}
+                  {totalFaturasPagasNoMes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
+                    <span style={{color:"#9a8a6a"}}>✅ faturas pagas</span>
+                    <span style={{color:"#22c55e"}}>{fmt(totalFaturasPagasNoMes)}</span>
+                  </div>}
+                  {(()=>{const deb=gastosFixosDoMes.filter(g=>{const ct=g.conta?contas.find(x=>x.id===g.conta):null;return (ct?.tipo==="corrente"||(!g.conta&&g.debitoAuto))&&!gfPago(g.id);}).reduce((s,g)=>s+Number(g.valor),0);return deb>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:"#f59e0b"}}>⏳ débitos pendentes</span><span style={{color:"#f59e0b",fontWeight:600}}>{fmt(deb)}</span></div>})()}
                   {totalDebitosNoMes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                    <span style={{color:"#9a8a6a"}}>débitos diretos</span>
-                    <span style={{color:"#ef4444"}}>−{fmt(totalDebitosNoMes)}</span>
+                    <span style={{color:"#9a8a6a"}}>✅ débitos pagos</span>
+                    <span style={{color:"#22c55e"}}>{fmt(totalDebitosNoMes)}</span>
                   </div>}
                   {totalFaturaAtual>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11,borderTop:"1px solid #f0ebe0",paddingTop:4,marginTop:2}}>
-                    <span style={{color:"#9a8a6a"}}>fatura atual ({MONTHS[nextFatMes]})</span>
+                    <span style={{color:"#9a8a6a"}}>fatura {MONTHS[nextFatMes]} (próx.)</span>
                     <span style={{color:"#6b7280",fontWeight:600}}>{fmt(totalFaturaAtual)}</span>
                   </div>}
                 </div>
@@ -739,29 +746,33 @@ export default function Dashboard({ userEmail, onLogout }) {
                     <span style={{color:"#ef4444"}}>−{fmt(totalFaturasPagasNoMes)}</span>
                   </div>}
                   {totalDebitosNoMes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                    <span style={{color:"#9a8a6a"}}>débitos</span>
+                    <span style={{color:"#9a8a6a"}}>débitos pagos</span>
                     <span style={{color:"#ef4444"}}>−{fmt(totalDebitosNoMes)}</span>
+                  </div>}
+                  {totalFaturasPendentesNoMes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11,borderTop:"1px solid #f0ebe0",paddingTop:4,marginTop:2}}>
+                    <span style={{color:"#f59e0b"}}>⏳ ainda a pagar</span>
+                    <span style={{color:"#f59e0b",fontWeight:600}}>−{fmt(totalFaturasPendentesNoMes)}</span>
                   </div>}
                 </div>
               </div>
 
-              {/* Card 4: Saldo previsto = previsto − fatura próximo mês − débitos */}
+              {/* Card 4: Saldo previsto próximo mês */}
               <div style={{...S.card,background:saldoPrevisto>=0?"white":"#fff5f5",border:saldoPrevisto<0?"1px solid #fecaca":"none"}}>
                 <div style={{fontSize:20,marginBottom:4}}>🔮</div>
-                <div style={S.label}>Saldo previsto</div>
+                <div style={S.label}>Saldo previsto — {MONTHS[proxMes]}</div>
                 <div style={S.val(saldoPrevisto>=0?"#a855f7":"#ef4444")}>{fmt(saldoPrevisto)}</div>
                 <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                    <span style={{color:"#9a8a6a"}}>receita prevista</span>
-                    <span style={{color:"#22c55e"}}>+{fmt(totalPrevisto)}</span>
+                    <span style={{color:"#9a8a6a"}}>receita prevista {MONTHS[proxMes]}</span>
+                    <span style={{color:"#22c55e"}}>+{fmt(totalProxMes)}</span>
                   </div>
                   {totalFaturaAtual>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
                     <span style={{color:"#9a8a6a"}}>fatura {MONTHS[nextFatMes]}</span>
                     <span style={{color:"#ef4444"}}>−{fmt(totalFaturaAtual)}</span>
                   </div>}
-                  {totalDebitosPrevisto>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                    <span style={{color:"#9a8a6a"}}>débitos previstos</span>
-                    <span style={{color:"#ef4444"}}>−{fmt(totalDebitosPrevisto)}</span>
+                  {totalDebitosProxMes>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
+                    <span style={{color:"#9a8a6a"}}>débitos {MONTHS[proxMes]}</span>
+                    <span style={{color:"#ef4444"}}>−{fmt(totalDebitosProxMes)}</span>
                   </div>}
                 </div>
               </div>
