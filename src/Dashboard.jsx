@@ -148,7 +148,7 @@ export default function Dashboard({ userEmail, onLogout }) {
   const [formOrc, setFormOrc] = useState({ nome:"", emoji:"🛒", cor:"#22c55e", categorias:[], limitesCat:{}, fixo:false });
   const [formGastoFixo, setFormGastoFixo] = useState({ descricao:"", valor:"", usuario:"Tiago", categoria:"outros", conta:"", orcamento:"", diaPagamento:"", debitoAuto:false, vigenciaInicio:"", vigenciaFim:"", parcelas:"" });
   const [modalGastoFixo, setModalGastoFixo] = useState(false);
-  // ── Feira ──
+  // ── ──
   const [feiraItens, setFeiraItens] = useState([]); // {id, nome, preco, qtd, categoria}
   const [feiraForm, setFeiraForm] = useState({ nome:"", preco:"", qtd:"1", categoria:"proteina" });
   const [feiraConf, setFeiraConf] = useState({ conta:"", orcamento:"feira", usuario:"Mariana" });
@@ -718,7 +718,7 @@ export default function Dashboard({ userEmail, onLogout }) {
       <div style={S.body}>
 
         {/* ===== RESUMO ===== */}
-        {tab==="resumo" && (
+        {tab==="Resumo" && (
           <div style={{display:"flex",flexDirection:"column",gap:18}}>
             <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:10}}>
 
@@ -1239,7 +1239,7 @@ export default function Dashboard({ userEmail, onLogout }) {
         )}
 
         {/* ===== RECEITAS ===== */}
-        {tab==="receitas" && (
+        {tab==="Receitas" && (
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             <div style={S.card}>
               <div style={{...S.label,marginBottom:12,color:"#22c55e"}}>+ Nova Receita Prevista</div>
@@ -1316,7 +1316,7 @@ export default function Dashboard({ userEmail, onLogout }) {
         )}
 
         {/* ===== GASTOS ===== */}
-        {tab==="gastos" && (
+        {tab==="Gastos" && (
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
 
             {/* RESUMO FIXOS */}
@@ -1562,7 +1562,7 @@ export default function Dashboard({ userEmail, onLogout }) {
         )}
 
         {/* ===== ORÇAMENTOS ===== */}
-        {tab==="orçamentos" && (
+        {tab==="Orçamentos" && (
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             <div style={{display:"flex",justifyContent:"flex-end"}}>
               <button style={S.btn()} onClick={()=>modal("orc",true)}>+ Novo Orçamento</button>
@@ -1675,7 +1675,7 @@ export default function Dashboard({ userEmail, onLogout }) {
         )}
 
         {/* ===== CARTÕES / FATURAS ===== */}
-        {tab==="cartões" && (
+        {tab==="Cartões" && (
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             <div style={{display:"flex",justifyContent:"flex-end"}}>
               <button style={S.btn()} onClick={()=>modal("conta",true)}>+ Nova Conta/Cartão</button>
@@ -1856,7 +1856,7 @@ export default function Dashboard({ userEmail, onLogout }) {
         )}
 
         {/* ===== FEIRA ===== */}
-        {tab==="🛒 feira" && (
+        {tab==="Feira" && (
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
 
             {/* Formulário de item */}
@@ -1992,7 +1992,7 @@ export default function Dashboard({ userEmail, onLogout }) {
         )}
 
         {/* ===== CATEGORIAS ===== */}
-        {tab==="categorias" && (
+        {tab==="Categorias" && (
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             <div style={{display:"flex",justifyContent:"flex-end"}}>
               <button style={S.btn()} onClick={()=>modal("cat",true)}>+ Nova Categoria</button>
