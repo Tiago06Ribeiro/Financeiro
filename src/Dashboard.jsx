@@ -148,6 +148,11 @@ export default function Dashboard({ userEmail, onLogout }) {
   const [formOrc, setFormOrc] = useState({ nome:"", emoji:"🛒", cor:"#22c55e", categorias:[], limitesCat:{}, fixo:false });
   const [formGastoFixo, setFormGastoFixo] = useState({ descricao:"", valor:"", usuario:"Tiago", categoria:"outros", conta:"", orcamento:"", diaPagamento:"", debitoAuto:false, vigenciaInicio:"", vigenciaFim:"", parcelas:"" });
   const [modalGastoFixo, setModalGastoFixo] = useState(false);
+  // ── Feira ──
+  const [feiraItens, setFeiraItens] = useState([]); // {id, nome, preco, qtd, categoria}
+  const [feiraForm, setFeiraForm] = useState({ nome:"", preco:"", qtd:"1", categoria:"proteina" });
+  const [feiraConf, setFeiraConf] = useState({ conta:"", orcamento:"feira", usuario:"Mariana" });
+  const [feiraConfirmando, setFeiraConfirmando] = useState(false);
 
   const [modals, setModals] = useState({ cat:false, conta:false, orc:false });
   const [editando, setEditando] = useState(null);
@@ -625,6 +630,37 @@ export default function Dashboard({ userEmail, onLogout }) {
     setModalGastoFixo(false);
   }
 
+  function addFeiraItem() {
+    if (!feiraForm.nome || !feiraForm.preco) return;
+    setFeiraItens(prev=>[...prev, {
+      id: Date.now(),
+      nome: feiraForm.nome,
+      preco: Number(feiraForm.preco),
+      qtd: Number(feiraForm.qtd)||1,
+      categoria: feiraForm.categoria,
+    }]);
+    setFeiraForm(f=>({...f, nome:"", preco:"", qtd:"1"}));
+  }
+
+  function confirmarFeira() {
+    if (!feiraItens.length || !feiraConf.conta) return;
+    const dataHoje = today();
+    const novosGastos = feiraItens.map(item => ({
+      id: Date.now() + Math.random(),
+      descricao: item.qtd > 1 ? `${item.nome} (${item.qtd}x)` : item.nome,
+      valor: Number((item.preco * item.qtd).toFixed(2)),
+      categoria: item.categoria,
+      conta: feiraConf.conta,
+      orcamento: feiraConf.orcamento,
+      usuario: feiraConf.usuario,
+      data: dataHoje,
+      mes, ano,
+    }));
+    setGastos(prev=>[...prev, ...novosGastos]);
+    setFeiraItens([]);
+    setFeiraConfirmando(false);
+  }
+
   function addOrc() {
     if (!formOrc.nome) return;
     setOrcamentos(prev=>[...prev,{...formOrc,id:"orc_"+Date.now()}]);
@@ -651,7 +687,7 @@ export default function Dashboard({ userEmail, onLogout }) {
   const gastosConta = cid => gastosDoMes.filter(g=>g.conta===cid).reduce((s,g)=>s+Number(g.valor),0);
   const catRecById = id => CAT_RECEITA.find(c=>c.id===id);
 
-  const tabs = ["resumo","receitas","gastos","orçamentos","cartões","categorias"];
+  const tabs = ["resumo","receitas","gastos","🛒 feira","orçamentos","cartões","categorias"];
 
   return (
     <div style={S.page}>
@@ -1816,6 +1852,142 @@ export default function Dashboard({ userEmail, onLogout }) {
                 </div>
               </div>
             </div>}
+          </div>
+        )}
+
+        {/* ===== FEIRA ===== */}
+        {tab==="🛒 feira" && (
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+            {/* Formulário de item */}
+            <div style={S.card}>
+              <div style={{...S.label,marginBottom:12,color:"#22c55e"}}>🛒 Adicionar item da feira</div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr auto",gap:8}}>
+                <input style={S.input} placeholder="Nome do item (ex: Frango, Banana...)"
+                  value={feiraForm.nome}
+                  onChange={e=>setFeiraForm(f=>({...f,nome:e.target.value}))}
+                  onKeyDown={e=>e.key==="Enter"&&addFeiraItem()}/>
+                <input style={S.input} type="number" placeholder="Preço unit. R$"
+                  value={feiraForm.preco}
+                  onChange={e=>setFeiraForm(f=>({...f,preco:e.target.value}))}/>
+                <input style={S.input} type="number" placeholder="Qtd" min="1"
+                  value={feiraForm.qtd}
+                  onChange={e=>setFeiraForm(f=>({...f,qtd:e.target.value}))}/>
+                <select style={S.select} value={feiraForm.categoria}
+                  onChange={e=>setFeiraForm(f=>({...f,categoria:e.target.value}))}>
+                  {catsGasto.map(c=><option key={c.id} value={c.id}>{c.emoji} {c.nome}</option>)}
+                </select>
+                <button style={S.btn("#22c55e")} onClick={addFeiraItem}>+ Adicionar</button>
+              </div>
+            </div>
+
+            {/* Lista de itens */}
+            {feiraItens.length > 0 && (
+              <div style={S.card}>
+                <div style={{...S.label,marginBottom:12}}>📋 Itens da feira — {feiraItens.length} {feiraItens.length===1?"item":"itens"}</div>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead>
+                    <tr>
+                      {["Item","Categoria","Qtd","Preço unit.","Total",""].map(h=><th key={h} style={S.th}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feiraItens.map((item,i)=>{
+                      const cat=catById(item.categoria);
+                      const total=item.preco*item.qtd;
+                      return <tr key={item.id} style={{background:i%2===0?"#fafafa":"white"}}>
+                        <td style={{...S.td,fontWeight:600}}>{item.nome}</td>
+                        <td style={S.td}>{cat&&<span style={S.tag(cat.cor)}>{cat.emoji} {cat.nome}</span>}</td>
+                        <td style={{...S.td,textAlign:"center",color:"#7a6a4a"}}>{item.qtd}x</td>
+                        <td style={{...S.td,color:"#9a8a6a"}}>{fmt(item.preco)}</td>
+                        <td style={{...S.td,fontWeight:700,color:"#ef4444"}}>{fmt(total)}</td>
+                        <td style={S.td}>
+                          <button onClick={()=>setFeiraItens(prev=>prev.filter(x=>x.id!==item.id))}
+                            style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 9px",cursor:"pointer",fontSize:13}}>🗑️</button>
+                        </td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Total + confirmação */}
+                <div style={{marginTop:16,padding:"14px 16px",background:"#f7f4ef",borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+                  <div>
+                    <div style={{fontSize:13,color:"#9a8a6a",marginBottom:2}}>Total da feira</div>
+                    <div style={{fontSize:24,fontWeight:"bold",color:"#ef4444"}}>
+                      {fmt(feiraItens.reduce((s,x)=>s+x.preco*x.qtd,0))}
+                    </div>
+                    <div style={{fontSize:11,color:"#9a8a6a",marginTop:2}}>
+                      {feiraItens.reduce((s,x)=>s+x.qtd,0)} unidades · {feiraItens.length} categorias de item
+                    </div>
+                  </div>
+
+                  {/* Seleção de cartão/orçamento/usuário */}
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                    <select style={{...S.select,width:"auto"}} value={feiraConf.conta}
+                      onChange={e=>setFeiraConf(f=>({...f,conta:e.target.value}))}>
+                      <option value="">💳 Selecionar cartão...</option>
+                      {contas.map(ct=><option key={ct.id} value={ct.id}>{ct.emoji} {ct.nome}</option>)}
+                    </select>
+                    <select style={{...S.select,width:"auto"}} value={feiraConf.orcamento}
+                      onChange={e=>setFeiraConf(f=>({...f,orcamento:e.target.value}))}>
+                      <option value="">Sem orçamento</option>
+                      {orcamentos.map(o=><option key={o.id} value={o.id}>{o.emoji} {o.nome}</option>)}
+                    </select>
+                    <select style={{...S.select,width:"auto"}} value={feiraConf.usuario}
+                      onChange={e=>setFeiraConf(f=>({...f,usuario:e.target.value}))}>
+                      <option>Tiago</option><option>Mariana</option>
+                    </select>
+                    <button
+                      onClick={()=>setFeiraConfirmando(true)}
+                      disabled={!feiraConf.conta}
+                      style={{...S.btn(feiraConf.conta?"#22c55e":"#9a8a6a"),padding:"10px 22px",fontSize:14,opacity:feiraConf.conta?1:0.5}}>
+                      ✓ Lançar nos gastos
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {feiraItens.length === 0 && (
+              <div style={{...S.card,textAlign:"center",padding:40,color:"#9a8a6a"}}>
+                <div style={{fontSize:40,marginBottom:8}}>🛒</div>
+                <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>Lista vazia</div>
+                <div style={{fontSize:12}}>Adicione os itens da feira acima</div>
+              </div>
+            )}
+
+            {/* Modal de confirmação */}
+            {feiraConfirmando&&<div style={S.modal}>
+              <div style={{...S.modalBox,width:400,textAlign:"center"}}>
+                <div style={{fontSize:36,marginBottom:12}}>🛒</div>
+                <h3 style={{margin:"0 0 6px",fontSize:17}}>Confirmar lançamento</h3>
+                <p style={{color:"#7a6a4a",fontSize:14,margin:"0 0 4px"}}>
+                  <strong>{feiraItens.length} itens</strong> serão lançados nos gastos variáveis
+                </p>
+                <p style={{color:"#ef4444",fontWeight:"bold",fontSize:20,margin:"8px 0 16px"}}>
+                  Total: {fmt(feiraItens.reduce((s,x)=>s+x.preco*x.qtd,0))}
+                </p>
+                <div style={{background:"#f7f4ef",borderRadius:8,padding:"10px 14px",marginBottom:16,textAlign:"left",fontSize:12,color:"#7a6a4a"}}>
+                  {(() => {
+                    const ct=contas.find(x=>x.id===feiraConf.conta);
+                    const orc=orcamentos.find(x=>x.id===feiraConf.orcamento);
+                    return <>
+                      <div>📅 Data: {today().split("-").reverse().join("/")}</div>
+                      {ct&&<div>{ct.emoji} Cartão: {ct.nome}</div>}
+                      {orc&&<div>{orc.emoji} Orçamento: {orc.nome}</div>}
+                      <div>👤 Usuário: {feiraConf.usuario}</div>
+                    </>;
+                  })()}
+                </div>
+                <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+                  <button style={{...S.btn(),background:"#f7f4ef",color:"#7a6a4a"}}
+                    onClick={()=>setFeiraConfirmando(false)}>Cancelar</button>
+                  <button style={S.btn("#22c55e")} onClick={confirmarFeira}>✓ Confirmar</button>
+                </div>
+              </div>
+            </div>}
+
           </div>
         )}
 
